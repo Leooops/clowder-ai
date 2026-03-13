@@ -6,6 +6,7 @@
 import './helpers/setup-cat-registry.js';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { before, describe, it, mock } from 'node:test';
@@ -2381,6 +2382,141 @@ describe('invokeSingleCat audit events (P1 fix)', () => {
     assert.equal(callbackEnv.CAT_CAFE_ANTHROPIC_PROFILE_MODE, 'api_key');
     assert.equal(callbackEnv.CAT_CAFE_ANTHROPIC_BASE_URL, 'https://api.root.example');
     assert.equal(callbackEnv.CAT_CAFE_ANTHROPIC_API_KEY, 'sk-root-profile');
+  });
+
+  it('F062 proxy-fallback: uses upstream baseUrl when local proxy is unreachable', async () => {
+    const { createProviderProfile } = await import('../dist/config/provider-profiles.js');
+    const root = await mkdtemp(join(tmpdir(), 'f062-proxy-fallback-'));
+    const apiDir = join(root, 'packages', 'api');
+    await mkdir(apiDir, { recursive: true });
+    await writeFile(join(root, 'pnpm-workspace.yaml'), 'packages:\n  - "packages/*"\n', 'utf-8');
+
+    await createProviderProfile(root, {
+      provider: 'anthropic',
+      name: 'proxy-fallback',
+      mode: 'api_key',
+      baseUrl: 'https://api.fallback.example',
+      apiKey: 'sk-proxy-fallback',
+      setActive: true,
+    });
+
+    // Pick a known-free port, then close it to force ECONNREFUSED.
+    const tmpServer = createServer();
+    await new Promise((resolve, reject) => {
+      tmpServer.once('error', reject);
+      tmpServer.listen(0, '127.0.0.1', resolve);
+    });
+    const closedPort = String(tmpServer.address().port);
+    await new Promise((resolve, reject) => {
+      tmpServer.close((err) => (err ? reject(err) : resolve()));
+    });
+
+    const optionsSeen = [];
+    const service = {
+      async *invoke(_prompt, options) {
+        optionsSeen.push(options ?? {});
+        yield { type: 'done', catId: 'opus', timestamp: Date.now() };
+      },
+    };
+
+    const deps = makeDeps();
+    const previousCwd = process.cwd();
+    const previousProxyEnabled = process.env.ANTHROPIC_PROXY_ENABLED;
+    const previousProxyPort = process.env.ANTHROPIC_PROXY_PORT;
+    try {
+      process.env.ANTHROPIC_PROXY_ENABLED = '1';
+      process.env.ANTHROPIC_PROXY_PORT = closedPort;
+      process.chdir(apiDir);
+      await collect(
+        invokeSingleCat(deps, {
+          catId: 'opus',
+          service,
+          prompt: 'test',
+          userId: 'user-f062-proxy-fallback',
+          threadId: 'thread-f062-proxy-fallback',
+          isLastCat: true,
+        }),
+      );
+    } finally {
+      process.chdir(previousCwd);
+      if (previousProxyEnabled === undefined) delete process.env.ANTHROPIC_PROXY_ENABLED;
+      else process.env.ANTHROPIC_PROXY_ENABLED = previousProxyEnabled;
+      if (previousProxyPort === undefined) delete process.env.ANTHROPIC_PROXY_PORT;
+      else process.env.ANTHROPIC_PROXY_PORT = previousProxyPort;
+      await rm(root, { recursive: true, force: true });
+    }
+
+    const callbackEnv = optionsSeen[0]?.callbackEnv ?? {};
+    assert.equal(callbackEnv.CAT_CAFE_ANTHROPIC_PROFILE_MODE, 'api_key');
+    assert.equal(callbackEnv.CAT_CAFE_ANTHROPIC_BASE_URL, 'https://api.fallback.example');
+    assert.equal(callbackEnv.CAT_CAFE_ANTHROPIC_API_KEY, 'sk-proxy-fallback');
+  });
+
+  it('F062 proxy-fallback: keeps proxy baseUrl when local proxy is reachable', async () => {
+    const { createProviderProfile } = await import('../dist/config/provider-profiles.js');
+    const root = await mkdtemp(join(tmpdir(), 'f062-proxy-reachable-'));
+    const apiDir = join(root, 'packages', 'api');
+    await mkdir(apiDir, { recursive: true });
+    await writeFile(join(root, 'pnpm-workspace.yaml'), 'packages:\n  - "packages/*"\n', 'utf-8');
+
+    await createProviderProfile(root, {
+      provider: 'anthropic',
+      name: 'proxy-reachable',
+      mode: 'api_key',
+      baseUrl: 'https://api.proxy.example',
+      apiKey: 'sk-proxy-reachable',
+      setActive: true,
+    });
+
+    const proxyServer = createServer((socket) => socket.destroy());
+    await new Promise((resolve, reject) => {
+      proxyServer.once('error', reject);
+      proxyServer.listen(0, '127.0.0.1', resolve);
+    });
+    const proxyPort = String(proxyServer.address().port);
+
+    const optionsSeen = [];
+    const service = {
+      async *invoke(_prompt, options) {
+        optionsSeen.push(options ?? {});
+        yield { type: 'done', catId: 'opus', timestamp: Date.now() };
+      },
+    };
+
+    const deps = makeDeps();
+    const previousCwd = process.cwd();
+    const previousProxyEnabled = process.env.ANTHROPIC_PROXY_ENABLED;
+    const previousProxyPort = process.env.ANTHROPIC_PROXY_PORT;
+    try {
+      process.env.ANTHROPIC_PROXY_ENABLED = '1';
+      process.env.ANTHROPIC_PROXY_PORT = proxyPort;
+      process.chdir(apiDir);
+      await collect(
+        invokeSingleCat(deps, {
+          catId: 'opus',
+          service,
+          prompt: 'test',
+          userId: 'user-f062-proxy-reachable',
+          threadId: 'thread-f062-proxy-reachable',
+          isLastCat: true,
+        }),
+      );
+    } finally {
+      await new Promise((resolve, reject) => {
+        proxyServer.close((err) => (err ? reject(err) : resolve()));
+      });
+      process.chdir(previousCwd);
+      if (previousProxyEnabled === undefined) delete process.env.ANTHROPIC_PROXY_ENABLED;
+      else process.env.ANTHROPIC_PROXY_ENABLED = previousProxyEnabled;
+      if (previousProxyPort === undefined) delete process.env.ANTHROPIC_PROXY_PORT;
+      else process.env.ANTHROPIC_PROXY_PORT = previousProxyPort;
+      await rm(root, { recursive: true, force: true });
+    }
+
+    const callbackEnv = optionsSeen[0]?.callbackEnv ?? {};
+    assert.equal(callbackEnv.CAT_CAFE_ANTHROPIC_PROFILE_MODE, 'api_key');
+    assert.match(callbackEnv.CAT_CAFE_ANTHROPIC_BASE_URL, new RegExp(`^http://127\\.0\\.0\\.1:${proxyPort}/`));
+    assert.equal(callbackEnv.CAT_CAFE_ANTHROPIC_API_KEY, 'sk-proxy-reachable');
   });
 
   it('F062-fix: skips auto-seal for api_key mode when context health is approx', async () => {

@@ -10,6 +10,7 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createConnection } from 'node:net';
 import { resolve } from 'node:path';
 import { type CatId, type ContextHealth, catRegistry, type MessageContent } from '@cat-cafe/shared';
 import { isSessionChainEnabled } from '../../../../../config/cat-config-loader.js';
@@ -64,6 +65,28 @@ function registerProxyUpstream(projectRoot: string, slug: string, targetUrl: str
   upstreams[slug] = targetUrl;
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   writeFileSync(filePath, `${JSON.stringify(upstreams, null, 2)}\n`);
+}
+
+async function isLocalProxyReachable(portRaw: string, timeoutMs = 250): Promise<boolean> {
+  const port = Number.parseInt(portRaw, 10);
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) return false;
+
+  return await new Promise((resolveReady) => {
+    const socket = createConnection({ host: '127.0.0.1', port });
+    let settled = false;
+
+    const settle = (ok: boolean): void => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolveReady(ok);
+    };
+
+    socket.setTimeout(timeoutMs);
+    socket.once('connect', () => settle(true));
+    socket.once('timeout', () => settle(false));
+    socket.once('error', () => settle(false));
+  });
 }
 
 /**
@@ -469,7 +492,15 @@ export async function* invokeSingleCat(deps: InvocationDeps, params: InvocationP
             if (proxyEnabled) {
               const slug = deriveProxySlug(profile.id);
               registerProxyUpstream(projectRoot, slug, profile.baseUrl);
-              callbackEnv.CAT_CAFE_ANTHROPIC_BASE_URL = `http://127.0.0.1:${proxyPort}/${slug}`;
+              const proxyBaseUrl = `http://127.0.0.1:${proxyPort}/${slug}`;
+              if (await isLocalProxyReachable(proxyPort)) {
+                callbackEnv.CAT_CAFE_ANTHROPIC_BASE_URL = proxyBaseUrl;
+              } else {
+                callbackEnv.CAT_CAFE_ANTHROPIC_BASE_URL = profile.baseUrl;
+                console.warn(
+                  `[invoke-single-cat] Anthropic proxy unreachable at 127.0.0.1:${proxyPort}, fallback to upstream`,
+                );
+              }
             } else {
               callbackEnv.CAT_CAFE_ANTHROPIC_BASE_URL = profile.baseUrl;
             }
