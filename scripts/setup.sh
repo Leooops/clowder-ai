@@ -29,7 +29,7 @@ echo ""
 
 # ── Step 1: Check prerequisites ─────────────────────────────
 
-echo -e "${CYAN}[1/5] Checking prerequisites / 检查前置依赖...${NC}"
+echo -e "${CYAN}[1/6] Checking prerequisites / 检查前置依赖...${NC}"
 echo ""
 
 MISSING=()
@@ -91,7 +91,7 @@ fi
 # ── Step 2: Install packages ────────────────────────────────
 
 echo ""
-echo -e "${CYAN}[2/5] Installing packages / 安装依赖包...${NC}"
+echo -e "${CYAN}[2/6] Installing packages / 安装依赖包...${NC}"
 echo ""
 
 if [ -d "node_modules" ]; then
@@ -100,10 +100,27 @@ fi
 pnpm install --frozen-lockfile 2>&1 | tail -3
 echo -e "  ${GREEN}✓${NC} Packages installed"
 
-# ── Step 3: Choose optional features ────────────────────────
+# ── Step 3: Mount skills ──────────────────────────────────
 
 echo ""
-echo -e "${CYAN}[3/5] Optional features / 可选功能${NC}"
+echo -e "${CYAN}[3/6] Mounting skills / 挂载技能...${NC}"
+echo ""
+echo "  Cat Café Skills provide development workflow governance."
+echo "  猫猫咖啡技能提供开发流程治理（feat-lifecycle、tdd 等）。"
+echo ""
+
+if [ -d "$PROJECT_DIR/cat-cafe-skills" ]; then
+    bash "$SCRIPT_DIR/sync-skills.sh"
+    echo ""
+    echo -e "  ${GREEN}✓${NC} Skills mounted to ~/.{claude,codex,gemini}/skills/"
+else
+    echo -e "  ${YELLOW}⚠${NC} cat-cafe-skills/ not found. Skipping skill mount."
+fi
+
+# ── Step 4: Choose optional features ────────────────────────
+
+echo ""
+echo -e "${CYAN}[4/6] Optional features / 可选功能${NC}"
 echo ""
 echo "Cat Cafe works with just a model API key."
 echo "猫猫咖啡只需一个模型 API Key 即可运行。"
@@ -204,9 +221,9 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
 fi
 echo ""
 
-# ── Step 4: Generate .env ───────────────────────────────────
+# ── Step 5: Generate .env ───────────────────────────────────
 
-echo -e "${CYAN}[4/5] Generating .env / 生成配置文件...${NC}"
+echo -e "${CYAN}[5/6] Generating .env / 生成配置文件...${NC}"
 echo ""
 
 if [ -f .env ]; then
@@ -289,10 +306,10 @@ fi
 
 echo -e "  ${GREEN}✓${NC} $ENV_FILE generated"
 
-# ── Step 5: Summary ─────────────────────────────────────────
+# ── Step 6: Summary ─────────────────────────────────────────
 
 echo ""
-echo -e "${CYAN}[5/5] Setup complete! / 安装完成！${NC}"
+echo -e "${CYAN}[6/6] Setup complete! / 安装完成！${NC}"
 echo ""
 echo "=================================="
 echo -e "${GREEN}🎉 Cat Cafe is ready!${NC}"
