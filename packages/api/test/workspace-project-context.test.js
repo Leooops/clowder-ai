@@ -24,6 +24,8 @@ describe('project-aware workspace worktrees', () => {
     // Create a temporary git repo to use as repoRoot
     await mkdir(TEMP_REPO, { recursive: true });
     execFileSync('git', ['init'], { cwd: TEMP_REPO });
+    execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: TEMP_REPO });
+    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: TEMP_REPO });
     execFileSync('git', ['checkout', '-b', 'main'], { cwd: TEMP_REPO });
     await writeFile(join(TEMP_REPO, 'README.md'), '# temp\n');
     execFileSync('git', ['add', '.'], { cwd: TEMP_REPO });
@@ -32,6 +34,8 @@ describe('project-aware workspace worktrees', () => {
     // Create a second temp repo with different content
     await mkdir(TEMP_REPO_2, { recursive: true });
     execFileSync('git', ['init'], { cwd: TEMP_REPO_2 });
+    execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: TEMP_REPO_2 });
+    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: TEMP_REPO_2 });
     execFileSync('git', ['checkout', '-b', 'main'], { cwd: TEMP_REPO_2 });
     await writeFile(join(TEMP_REPO_2, 'README.md'), '# repo two\n');
     await writeFile(join(TEMP_REPO_2, 'only-in-two.txt'), 'unique\n');
