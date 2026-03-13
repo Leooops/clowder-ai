@@ -561,7 +561,7 @@
     {
       "id": "F091",
       "name": "Signal Study Mode — 信号学习伴侣",
-      "status": "in-progress (Phase 8 podcast context injection done) | **Owner**: Ragdoll",
+      "status": "in-progress (Phase 9 signal nav + notes viewable done) | **Owner**: Ragdoll",
       "file": "F091-signal-study-mode.md"
     },
     {
@@ -689,7 +689,31 @@
       "name": "Voice Playback Queue — 语音播放队列 + Intent 调度",
       "status": "spec | **Owner**: Ragdoll (Opus 4.6) | **Priority**: P2",
       "file": "F112-voice-playback-queue.md"
+    },
+    {
+      "id": "F113",
+      "name": "Multi-Platform One-Click Deploy",
+      "status": "backlog | **Source**: clowder-ai #14 (mindfn) | **Priority**: P2",
+      "file": "F113-multi-platform-one-click-deploy.md"
+    },
+    {
+      "id": "F114",
+      "name": "Bootcamp Phase Transition UX",
+      "status": "backlog | **Source**: clowder-ai #16 (mindfn) | **Priority**: P2",
+      "file": "F114-bootcamp-phase-transition-ux.md"
+    },
+    {
+      "id": "F115",
+      "name": "Chat Panel Resizable Width",
+      "status": "backlog | **Source**: clowder-ai #28 (Ragdoll/opus) | **Priority**: P3",
+      "file": "F115-chat-panel-resizable-width.md"
+    },
+    {
+      "id": "F116",
+      "name": "Thread List Hover Summary Tooltip",
+      "status": "backlog | **Source**: clowder-ai #29 (Ragdoll/opus) | **Priority**: P3",
+      "file": "F116-thread-list-hover-summary-tooltip.md"
     }
   ],
-  "generated_at": "2026-03-13T08:03:34.232Z"
+  "generated_at": "2026-03-13T11:58:16.090Z"
 }
