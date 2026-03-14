@@ -1,0 +1,74 @@
+#!/bin/bash
+# .githooks/pre-commit — Worktree isolation guard + shared-state guard
+#
+# Two checks:
+#   1. Feature-branch commits in primary repo → BLOCK (must use worktree)
+#   2. Shared-state files on non-main branch → BLOCK (must be on main)
+#
+# Override: SKIP_WORKTREE_CHECK=1 (for exceptional cases with explicit reason)
+
+set -euo pipefail
+
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
+BRANCH=$(git branch --show-current 2>/dev/null || echo "")
+
+# Skip checks in detached HEAD state
+if [[ -z "$BRANCH" ]]; then
+  exit 0
+fi
+
+# ─── Guard 1: Worktree isolation ───────────────────────────────────────
+# In a real worktree, .git is a *file* pointing to the main repo's .git/worktrees/<name>.
+# In the primary repo, .git is a *directory*.
+# Feature branches should only be committed from worktrees, not the primary repo.
+
+if [[ -d "$REPO_ROOT/.git" ]]; then
+  # We are in the primary (non-worktree) repo directory
+  IS_PRIMARY=true
+else
+  IS_PRIMARY=false
+fi
+
+# Allowed branches in primary repo: main, runtime/*
+ALLOWED_PRIMARY_PATTERN='^(main|runtime/.*)$'
+
+if $IS_PRIMARY && ! echo "$BRANCH" | grep -qE "$ALLOWED_PRIMARY_PATTERN"; then
+  if [[ -z "${SKIP_WORKTREE_CHECK:-}" ]]; then
+    echo "" >&2
+    echo "🚫 WORKTREE GUARD: Committing on feature branch in primary repo directory!" >&2
+    echo "" >&2
+    echo "   Branch:  $BRANCH" >&2
+    echo "   Repo:    $REPO_ROOT" >&2
+    echo "" >&2
+    echo "   SOP requires isolated worktree for code changes:" >&2
+    echo "     git worktree add ../cat-cafe-{name} -b $BRANCH" >&2
+    echo "" >&2
+    echo "   Override (use sparingly): SKIP_WORKTREE_CHECK=1 git commit ..." >&2
+    echo "" >&2
+    exit 1
+  else
+    echo "⚠️  WORKTREE GUARD: Override active (SKIP_WORKTREE_CHECK=1). Proceeding." >&2
+  fi
+fi
+
+# ─── Guard 2: Shared-state files ──────────────────────────────────────
+# Shared-state files must only be modified on main, committed, and pushed immediately.
+
+SHARED_PATTERNS='^(docs/BACKLOG\.md|cat-config\.json|BACKLOG\.md)$'
+STAGED_SHARED=$(git diff --cached --name-only 2>/dev/null | grep -E "$SHARED_PATTERNS" || true)
+
+if [[ -n "$STAGED_SHARED" ]] && [[ "$BRANCH" != "main" ]]; then
+  echo "" >&2
+  echo "🚫 SHARED-STATE GUARD: Cannot commit shared-state files on non-main branch!" >&2
+  echo "" >&2
+  echo "   Branch:  $BRANCH" >&2
+  echo "   Files:" >&2
+  echo "$STAGED_SHARED" | sed 's/^/     - /' >&2
+  echo "" >&2
+  echo "   Shared-state files must be modified on 'main' and pushed immediately." >&2
+  echo "   See: cat-cafe-skills/refs/shared-rules.md §14" >&2
+  echo "" >&2
+  exit 1
+fi
+
+exit 0

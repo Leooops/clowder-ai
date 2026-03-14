@@ -100,6 +100,10 @@ fi
 pnpm install --frozen-lockfile 2>&1 | tail -3
 echo -e "  ${GREEN}✓${NC} Packages installed"
 
+# Configure git hooks
+git config core.hooksPath .githooks 2>/dev/null || true
+echo -e "  ${GREEN}✓${NC} Git hooks configured (.githooks/)"
+
 # ── Step 3: Choose optional features ────────────────────────
 
 echo ""
