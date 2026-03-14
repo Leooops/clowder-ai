@@ -53,3 +53,4 @@ created: 2026-02-26
 | F112 | Voice Playback Queue — 语音播放队列 + Intent 调度 | spec | Ragdoll | internal | [F112](features/F112-voice-playback-queue.md) |
 | F113 | Multi-Platform One-Click Deploy — 多平台一键部署 | spec | community | community [#14](https://github.com/zts212653/clowder-ai/issues/14) | [F113](features/F113-multi-platform-one-click-deploy.md) |
 | F114 | 喵约治理升级 — 四层架构 + Magic Words + Evidence Gate | spec | Ragdoll | internal | [F114](features/F114-governance-magic-words.md) |
+| F115 | 排队消息延迟显示 — 队列中的消息不应进入聊天流 | spec | opus | community [#20](https://github.com/zts212653/clowder-ai/issues/20) | [F115](features/F115-queue-message-deferred-display.md) |

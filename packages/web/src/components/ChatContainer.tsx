@@ -280,11 +280,29 @@ export function ChatContainer({ threadId }: ChatContainerProps) {
     | { kind: 'message'; msg: ChatMessageData }
     | { kind: 'a2a_group'; groupId: string; messages: ChatMessageData[] };
 
+  // F115: Build set of message IDs that are still *queued* (not yet processing).
+  // Only status='queued' entries are hidden — once an entry moves to 'processing',
+  // QueuePanel stops showing it, so the message must become visible in the chat stream.
+  const queueRaw = useChatStore((s) => s.queue);
+  const queuedMessageIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (!queueRaw) return ids;
+    for (const entry of queueRaw) {
+      if (entry.status !== 'queued') continue;
+      if (entry.messageId) ids.add(entry.messageId);
+      for (const mid of entry.mergedMessageIds) ids.add(mid);
+    }
+    return ids;
+  }, [queueRaw]);
+
   const renderItems = useMemo<RenderItem[]>(() => {
     const items: RenderItem[] = [];
     let currentGroup: { groupId: string; messages: ChatMessageData[] } | null = null;
 
     for (const msg of messages) {
+      // F115: Skip messages whose queue entry is still 'queued'.
+      // Messages in 'processing' are NOT filtered — they must be visible in the chat stream.
+      if (queuedMessageIds.has(msg.id)) continue;
       if (msg.a2aGroupId) {
         if (currentGroup && currentGroup.groupId === msg.a2aGroupId) {
           currentGroup.messages.push(msg);
@@ -302,7 +320,7 @@ export function ChatContainer({ threadId }: ChatContainerProps) {
     }
     if (currentGroup) items.push({ kind: 'a2a_group', ...currentGroup });
     return items;
-  }, [messages]);
+  }, [messages, queuedMessageIds]);
 
   const renderSingleMessage = useCallback(
     (msg: ChatMessageData) => (
