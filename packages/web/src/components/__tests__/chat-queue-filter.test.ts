@@ -1,5 +1,5 @@
 /**
- * F115: Queued messages should NOT appear in the chat message stream.
+ * #20: Queued messages should NOT appear in the chat message stream.
  *
  * When a user message is queued (its ID matches a QueueEntry with status='queued'),
  * it should be filtered out of the chat render items and only shown in QueuePanel.
@@ -51,7 +51,7 @@ function makeQueueEntry(overrides: Partial<QueueEntry> = {}): QueueEntry {
   };
 }
 
-describe('F115: queued message filtering', () => {
+describe('#20: queued message filtering', () => {
   it('hides a message whose ID matches a queued entry', () => {
     const messages = [makeMsg('m1'), makeMsg('m2'), makeMsg('m3', 'assistant')];
     const queue = [makeQueueEntry({ messageId: 'm2' })];

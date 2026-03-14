@@ -701,13 +701,7 @@
       "name": "喵约治理升级 — 四层架构 + Magic Words + Evidence Gate",
       "status": "spec | **Owner**: Ragdoll | **Priority**: P1",
       "file": "F114-governance-magic-words.md"
-    },
-    {
-      "id": "F115",
-      "name": "排队消息延迟显示 — 队列中的消息不应进入聊天流",
-      "status": "spec | **Owner**: opus | **Priority**: P1",
-      "file": "F115-queue-message-deferred-display.md"
     }
   ],
-  "generated_at": "2026-03-14T07:30:28.816Z"
+  "generated_at": "2026-03-14T08:25:03.816Z"
 }

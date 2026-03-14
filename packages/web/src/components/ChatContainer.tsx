@@ -280,9 +280,12 @@ export function ChatContainer({ threadId }: ChatContainerProps) {
     | { kind: 'message'; msg: ChatMessageData }
     | { kind: 'a2a_group'; groupId: string; messages: ChatMessageData[] };
 
-  // F115: Build set of message IDs that are still *queued* (not yet processing).
+  // #20: Build set of message IDs that are still *queued* (not yet processing).
   // Only status='queued' entries are hidden — once an entry moves to 'processing',
   // QueuePanel stops showing it, so the message must become visible in the chat stream.
+  //
+  // Also builds a content→true map for queued entries so we can catch optimistic
+  // messages (id='user-xxx') before replaceThreadMessageId swaps to the server ID.
   const queueRaw = useChatStore((s) => s.queue);
   const queuedMessageIds = useMemo(() => {
     const ids = new Set<string>();
@@ -294,15 +297,26 @@ export function ChatContainer({ threadId }: ChatContainerProps) {
     }
     return ids;
   }, [queueRaw]);
+  const queuedContents = useMemo(() => {
+    const set = new Set<string>();
+    if (!queueRaw) return set;
+    for (const entry of queueRaw) {
+      if (entry.status !== 'queued') continue;
+      if (entry.content) set.add(entry.content);
+    }
+    return set;
+  }, [queueRaw]);
 
   const renderItems = useMemo<RenderItem[]>(() => {
     const items: RenderItem[] = [];
     let currentGroup: { groupId: string; messages: ChatMessageData[] } | null = null;
 
     for (const msg of messages) {
-      // F115: Skip messages whose queue entry is still 'queued'.
+      // #20: Skip messages whose queue entry is still 'queued'.
       // Messages in 'processing' are NOT filtered — they must be visible in the chat stream.
+      // Also catch optimistic messages (user-xxx) via content match before ID swap completes.
       if (queuedMessageIds.has(msg.id)) continue;
+      if (msg.id.startsWith('user-') && msg.type === 'user' && queuedContents.has(msg.content)) continue;
       if (msg.a2aGroupId) {
         if (currentGroup && currentGroup.groupId === msg.a2aGroupId) {
           currentGroup.messages.push(msg);
@@ -320,7 +334,21 @@ export function ChatContainer({ threadId }: ChatContainerProps) {
     }
     if (currentGroup) items.push({ kind: 'a2a_group', ...currentGroup });
     return items;
-  }, [messages, queuedMessageIds]);
+  }, [messages, queuedMessageIds, queuedContents]);
+
+  // #20: Visible messages list (queue-filtered) for components that need a flat array
+  // instead of RenderItem[] (e.g. MessageNavigator).
+  const visibleMessages = useMemo(
+    () =>
+      queuedMessageIds.size === 0 && queuedContents.size === 0
+        ? messages
+        : messages.filter(
+            (m) =>
+              !queuedMessageIds.has(m.id) &&
+              !(m.id.startsWith('user-') && m.type === 'user' && queuedContents.has(m.content)),
+          ),
+    [messages, queuedMessageIds, queuedContents],
+  );
 
   const renderSingleMessage = useCallback(
     (msg: ChatMessageData) => (
@@ -546,7 +574,9 @@ export function ChatContainer({ threadId }: ChatContainerProps) {
             recomputeSignal={computeScrollRecomputeSignal(threadId, messages, uiThinkingExpandedByDefault ? 1 : 0)}
             observerKey={threadId}
           />
-          {messages.length > 5 && <MessageNavigator messages={messages} scrollContainerRef={scrollContainerRef} />}
+          {visibleMessages.length > 5 && (
+            <MessageNavigator messages={visibleMessages} scrollContainerRef={scrollContainerRef} />
+          )}
         </div>
 
         {authPending.length > 0 && (
