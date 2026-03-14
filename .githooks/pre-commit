@@ -29,8 +29,8 @@ else
   IS_PRIMARY=false
 fi
 
-# Allowed branches in primary repo: main, runtime/*
-ALLOWED_PRIMARY_PATTERN='^(main|runtime/.*)$'
+# Allowed branches in primary repo: main, runtime/main-sync
+ALLOWED_PRIMARY_PATTERN='^(main|runtime/main-sync)$'
 
 if $IS_PRIMARY && ! echo "$BRANCH" | grep -qE "$ALLOWED_PRIMARY_PATTERN"; then
   if [[ -z "${SKIP_WORKTREE_CHECK:-}" ]]; then
@@ -54,7 +54,8 @@ fi
 # ─── Guard 2: Shared-state files ──────────────────────────────────────
 # Shared-state files must only be modified on main, committed, and pushed immediately.
 
-SHARED_PATTERNS='^(docs/BACKLOG\.md|cat-config\.json|BACKLOG\.md)$'
+# Per shared-rules.md §14: docs/ROADMAP.md + cat-config.json
+SHARED_PATTERNS='^(docs/ROADMAP\.md|cat-config\.json)$'
 STAGED_SHARED=$(git diff --cached --name-only 2>/dev/null | grep -E "$SHARED_PATTERNS" || true)
 
 if [[ -n "$STAGED_SHARED" ]] && [[ "$BRANCH" != "main" ]]; then

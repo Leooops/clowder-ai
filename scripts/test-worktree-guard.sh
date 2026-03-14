@@ -107,12 +107,12 @@ fi
 git checkout main --quiet
 
 # ── Test 5: Shared-state file on non-main branch → BLOCKED ───
-echo "[Test 5] Shared-state file on feature branch — should BLOCK"
+echo "[Test 5] Shared-state file (ROADMAP.md) on feature branch — should BLOCK"
 git checkout -b feat/shared-state-test --quiet 2>/dev/null || git checkout feat/shared-state-test --quiet
 # Need override for worktree guard to test shared-state guard
 mkdir -p docs
-echo "backlog" > docs/BACKLOG.md
-git add docs/BACKLOG.md
+echo "roadmap" > docs/ROADMAP.md
+git add docs/ROADMAP.md
 
 if SKIP_WORKTREE_CHECK=1 git commit -m "shared state should fail" --quiet 2>/dev/null; then
   log_fail "shared-state commit succeeded but should have been blocked"
@@ -120,14 +120,27 @@ else
   log_pass "shared-state commit blocked on feature branch"
 fi
 
-git reset HEAD docs/BACKLOG.md --quiet 2>/dev/null || true
+git reset HEAD docs/ROADMAP.md --quiet 2>/dev/null || true
+
+# ── Test 5b: cat-config.json on non-main branch → BLOCKED ────
+echo "[Test 5b] Shared-state file (cat-config.json) on feature branch — should BLOCK"
+echo '{}' > cat-config.json
+git add cat-config.json
+
+if SKIP_WORKTREE_CHECK=1 git commit -m "cat-config should fail" --quiet 2>/dev/null; then
+  log_fail "cat-config commit succeeded but should have been blocked"
+else
+  log_pass "cat-config commit blocked on feature branch"
+fi
+
+git reset HEAD cat-config.json --quiet 2>/dev/null || true
 git checkout main --quiet
 
 # ── Test 6: Shared-state file on main → ALLOWED ──────────────
-echo "[Test 6] Shared-state file on main — should ALLOW"
+echo "[Test 6] Shared-state file (ROADMAP.md) on main — should ALLOW"
 mkdir -p docs
-echo "backlog on main" > docs/BACKLOG.md
-git add docs/BACKLOG.md
+echo "roadmap on main" > docs/ROADMAP.md
+git add docs/ROADMAP.md
 
 if git commit -m "shared state on main" --quiet 2>/dev/null; then
   log_pass "shared-state commit on main allowed"
@@ -135,18 +148,33 @@ else
   log_fail "shared-state commit on main was blocked"
 fi
 
-# ── Test 7: runtime/* branch in primary repo → ALLOWED ───────
-echo "[Test 7] runtime/* branch in primary repo — should ALLOW"
-git checkout -b runtime/test-sync --quiet
+# ── Test 7: runtime/main-sync branch in primary repo → ALLOWED ─
+echo "[Test 7] runtime/main-sync branch in primary repo — should ALLOW"
+git checkout -b runtime/main-sync --quiet
 echo "runtime" > runtime-file.txt
 git add runtime-file.txt
 
 if git commit -m "runtime branch ok" --quiet 2>/dev/null; then
-  log_pass "runtime branch commit allowed"
+  log_pass "runtime/main-sync commit allowed"
 else
-  log_fail "runtime branch commit was blocked"
+  log_fail "runtime/main-sync commit was blocked"
 fi
 
+git checkout main --quiet
+
+# ── Test 8: runtime/other branch in primary repo → BLOCKED ────
+echo "[Test 8] runtime/other branch in primary repo — should BLOCK"
+git checkout -b runtime/other --quiet
+echo "other runtime" > runtime-other.txt
+git add runtime-other.txt
+
+if git commit -m "should fail" --quiet 2>/dev/null; then
+  log_fail "runtime/other commit succeeded but should have been blocked"
+else
+  log_pass "runtime/other commit blocked as expected"
+fi
+
+git reset HEAD runtime-other.txt --quiet 2>/dev/null || true
 git checkout main --quiet
 
 # ── Summary ───────────────────────────────────────────────────
