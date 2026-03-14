@@ -193,6 +193,7 @@ pnpm hindsight:stop     # Shut down
 pnpm start              # Start everything (Redis + API + Frontend)
 pnpm start --memory     # No Redis, in-memory mode
 pnpm start --quick      # Skip rebuild, use existing dist/
+pnpm runtime:start      # Advanced: start via git worktree (production/maintainer mode)
 
 pnpm check              # Biome lint + format check
 pnpm check:fix          # Auto-fix lint issues
@@ -408,6 +409,7 @@ pnpm hindsight:stop     # 关闭
 pnpm start              # 启动全部（Redis + API + 前端）
 pnpm start --memory     # 无 Redis，纯内存模式
 pnpm start --quick      # 跳过重编译，用已有 dist/
+pnpm runtime:start      # 高级：通过 git worktree 启动（生产/维护者模式）
 
 pnpm check              # Biome lint + 格式检查
 pnpm check:fix          # 自动修复 lint 问题

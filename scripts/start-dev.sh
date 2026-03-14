@@ -51,6 +51,12 @@ done
 
 # 加载环境变量 (放最前面，后续函数需要端口号)
 # 默认读取 .env；.env.local 仅用于 DARE 相关白名单键，避免全量覆盖引发配置漂移。
+# 首次启动自动从 .env.example 创建 .env
+if [ ! -f .env ] && [ -f .env.example ]; then
+    echo -e "${YELLOW}  首次启动，从 .env.example 创建 .env...${NC}"
+    cp .env.example .env
+    echo -e "${GREEN}  ✓ .env 已创建，可按需编辑${NC}"
+fi
 if [ -f .env ]; then
     set -a
     source .env
@@ -328,15 +334,16 @@ setup_storage() {
             STARTED_REDIS=true
             print_redis_runtime_info
         else
-            echo -e "${RED}  ✗ Redis 启动失败${NC}"
-            echo -e "${RED}    使用 --memory 标志允许内存模式启动${NC}"
-            exit 1
+            echo -e "${YELLOW}  ⚠ Redis 启动失败，自动降级到内存模式${NC}"
+            echo -e "${YELLOW}    提示: 安装 Redis 可持久化数据 (brew install redis)${NC}"
+            unset REDIS_URL
+            export MEMORY_STORE=1
         fi
     else
-        echo -e "${RED}  ✗ Redis 未安装${NC}"
-        echo -e "${YELLOW}    安装: brew install redis${NC}"
-        echo -e "${RED}    使用 --memory 标志允许内存模式启动${NC}"
-        exit 1
+        echo -e "${YELLOW}  ⚠ Redis 未安装，自动降级到内存模式${NC}"
+        echo -e "${YELLOW}    提示: 安装 Redis 可持久化数据 (brew install redis)${NC}"
+        unset REDIS_URL
+        export MEMORY_STORE=1
     fi
 }
 
