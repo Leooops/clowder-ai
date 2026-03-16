@@ -300,16 +300,31 @@ export function ChatContainer({ threadId }: ChatContainerProps) {
   const queuedContentCounts = useMemo(() => {
     const counts = new Map<string, number>();
     if (!queueRaw) return counts;
+    const bump = (k: string) => counts.set(k, (counts.get(k) ?? 0) + 1);
     for (const entry of queueRaw) {
       if (entry.status !== 'queued') continue;
       if (!entry.content) continue;
-      // #20: Only store the exact entry.content string. For merged entries,
-      // individual message server IDs are already in queuedMessageIds (via
-      // messageId + mergedMessageIds), so the ID-based filter handles them.
-      // The content fallback only covers the brief optimistic ID window for
-      // un-merged entries. Avoid line-splitting to prevent false positives
-      // on content that was never a standalone queued message.
-      counts.set(entry.content, (counts.get(entry.content) ?? 0) + 1);
+      // #20: Content fallback only needed for messages still in the optimistic
+      // ID window (user-xxx not yet swapped to server ID). If messageId is
+      // already backfilled, the ID filter handles it — skip content quota to
+      // avoid falsely hiding unrelated optimistic sends with matching text.
+      if (entry.mergedMessageIds.length > 0) {
+        // Merged entry: content is "a\nb\nc". Each segment corresponds to one
+        // send. Only add segments whose server ID isn't yet known (not in
+        // messageId or mergedMessageIds — i.e. still optimistic user-xxx).
+        // messageId covers the first segment, mergedMessageIds[i] covers
+        // segment i+1.
+        const segments = entry.content.split('\n');
+        if (!entry.messageId && segments[0]) bump(segments[0]);
+        for (let i = 1; i < segments.length; i++) {
+          if (i - 1 >= entry.mergedMessageIds.length && segments[i]) {
+            bump(segments[i]);
+          }
+        }
+      } else if (!entry.messageId) {
+        // Non-merged: only need content fallback if messageId not yet set.
+        bump(entry.content);
+      }
     }
     return counts;
   }, [queueRaw]);
