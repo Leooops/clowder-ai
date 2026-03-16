@@ -101,10 +101,11 @@ export function useAgentMessages() {
       const store = useChatStore.getState();
       const isActiveThreadTimeout = store.currentThreadId === timeoutThreadId;
 
-      // #30 fix: Context-aware timeout message
+      // #30 fix: Context-aware timeout message (read before clearing)
       const timeoutContent = sawToolEventsRef.current
         ? '⏱ 工具已执行但最终响应未返回。CLI 可能仍在后台运行，或已超时终止。'
         : '⏱ Response timed out. The operation may still be running in the background.';
+      sawToolEventsRef.current = false;
 
       if (!isActiveThreadTimeout) {
         const threadState = store.getThreadState(timeoutThreadId);
@@ -686,6 +687,7 @@ export function useAgentMessages() {
   const handleStop = useCallback(
     (cancelFn: (threadId: string) => void, threadId: string) => {
       cancelFn(threadId);
+      sawToolEventsRef.current = false;
       const store = useChatStore.getState();
       const isActiveThreadStop = threadId === store.currentThreadId;
 
