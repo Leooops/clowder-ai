@@ -303,24 +303,13 @@ export function ChatContainer({ threadId }: ChatContainerProps) {
     for (const entry of queueRaw) {
       if (entry.status !== 'queued') continue;
       if (!entry.content) continue;
-      // #20: Collect all content variants this entry could match, deduped per entry.
-      // Each unique variant gets +1 count (not per-occurrence within one entry).
-      const variants = new Set<string>();
-      variants.add(entry.content);
-      const lines = entry.content.split('\n');
-      for (const line of lines) {
-        if (line) variants.add(line);
-      }
-      if (lines.length > 1) {
-        for (let start = 0; start < lines.length; start++) {
-          for (let end = start + 2; end <= lines.length; end++) {
-            variants.add(lines.slice(start, end).join('\n'));
-          }
-        }
-      }
-      for (const v of variants) {
-        counts.set(v, (counts.get(v) ?? 0) + 1);
-      }
+      // #20: Only store the exact entry.content string. For merged entries,
+      // individual message server IDs are already in queuedMessageIds (via
+      // messageId + mergedMessageIds), so the ID-based filter handles them.
+      // The content fallback only covers the brief optimistic ID window for
+      // un-merged entries. Avoid line-splitting to prevent false positives
+      // on content that was never a standalone queued message.
+      counts.set(entry.content, (counts.get(entry.content) ?? 0) + 1);
     }
     return counts;
   }, [queueRaw]);
