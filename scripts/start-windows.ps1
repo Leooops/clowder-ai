@@ -6,18 +6,19 @@
 .DESCRIPTION
   Starts API server and Frontend (Next.js) with .env loading.
   Optionally starts Redis if available.
+  Default: production mode (next build + next start). Use -Dev for hot reload.
 
 .EXAMPLE
-  .\scripts\start-windows.ps1              # normal start
+  .\scripts\start-windows.ps1              # production mode (default)
   .\scripts\start-windows.ps1 -Quick       # skip rebuild
   .\scripts\start-windows.ps1 -Memory      # skip Redis, use in-memory storage
-  .\scripts\start-windows.ps1 -ProdWeb     # production frontend build
+  .\scripts\start-windows.ps1 -Dev         # development mode (next dev, hot reload)
 #>
 
 param(
     [switch]$Quick,
     [switch]$Memory,
-    [switch]$ProdWeb
+    [switch]$Dev
 )
 
 $ErrorActionPreference = "Stop"
@@ -151,7 +152,7 @@ if (-not $Quick) {
     Pop-Location
     Write-Ok "api"
 
-    if ($ProdWeb) {
+    if (-not $Dev) {
         Write-Host "  Building web (production)..."
         Push-Location (Join-Path $ProjectRoot "packages/web")
         & pnpm run build
@@ -191,8 +192,18 @@ $jobs += $apiJob
 Start-Sleep -Seconds 2
 
 # Frontend
-if ($ProdWeb) {
-    # Production mode: next start
+if ($Dev) {
+    # Development mode: next dev (hot reload)
+    Write-Host "  Starting Frontend (port $WebPort, dev)..."
+    $webJob = Start-Job -ScriptBlock {
+        param($root, $port)
+        Set-Location (Join-Path $root "packages/web")
+        $env:PORT = $port
+        $env:NEXT_IGNORE_INCORRECT_LOCKFILE = "1"
+        & pnpm exec next dev -p $port 2>&1
+    } -ArgumentList $ProjectRoot, $WebPort
+} else {
+    # Production mode: next start (default — avoids #105 issues)
     $nextDir = Join-Path $ProjectRoot "packages/web/.next"
     if (-not (Test-Path $nextDir)) {
         Write-Err ".next directory not found — run without -Quick first to build"
@@ -205,16 +216,6 @@ if ($ProdWeb) {
         $env:PORT = $port
         & pnpm exec next start -p $port -H 0.0.0.0 2>&1
     } -ArgumentList $ProjectRoot, $WebPort
-} else {
-    # Development mode: next dev
-    Write-Host "  Starting Frontend (port $WebPort, dev)..."
-    $webJob = Start-Job -ScriptBlock {
-        param($root, $port)
-        Set-Location (Join-Path $root "packages/web")
-        $env:PORT = $port
-        $env:NEXT_IGNORE_INCORRECT_LOCKFILE = "1"
-        & pnpm exec next dev -p $port 2>&1
-    } -ArgumentList $ProjectRoot, $WebPort
 }
 $jobs += $webJob
 
@@ -222,7 +223,7 @@ Start-Sleep -Seconds 3
 
 # ── Status ──────────────────────────────────────────────────
 $storageMode = if ($useRedis) { "Redis (redis://localhost:$RedisPort)" } else { "Memory (restart loses data)" }
-$frontendMode = if ($ProdWeb) { "production (PWA enabled)" } else { "development (hot reload)" }
+$frontendMode = if ($Dev) { "development (hot reload)" } else { "production (PWA enabled)" }
 
 Write-Host ""
 Write-Host "  ========================================" -ForegroundColor Green

@@ -1,154 +1,147 @@
 <#
 .SYNOPSIS
-  Clowder AI (Cat Cafe) — Windows One-Click Installer
+  Clowder AI — Windows One-Click Installer
   猫猫咖啡 Windows 一键安装脚本
 
 .DESCRIPTION
-  9-step installation:
-    1. Detect OS & shell (Windows / PowerShell)
-    2. Check prerequisites (Node >=20, pnpm >=8, Git)
-    3. Check optional dependencies (Redis)
-    4. Clone or verify repository
-    5. Install npm dependencies (pnpm install)
-    6. Generate .env from .env.example
-    7. Build all packages (shared → mcp-server → api → web)
-    8. Verify build artifacts
-    9. Print success summary with next steps
+  Installs all prerequisites and sets up Clowder AI on a bare Windows 11 machine.
+  Steps: env detect → Node/pnpm install → Redis → clone/build → skills mount
+         → AI CLI tools → auth config → .env → verify & start
 
 .EXAMPLE
-  # Run from repo root:
+  # From repo root:
   .\scripts\install.ps1
-
-  # Or from any directory (auto-clones):
-  irm https://raw.githubusercontent.com/clowder-ai/cat-cafe/main/scripts/install.ps1 | iex
+  # From any directory (auto-clones):
+  powershell -ExecutionPolicy Bypass -File install.ps1
 #>
 
 param(
     [switch]$SkipRedis,
     [switch]$SkipBuild,
-    [string]$RepoUrl = "https://github.com/clowder-ai/cat-cafe.git",
+    [switch]$SkipCli,
+    [string]$RepoUrl = "https://github.com/zts212653/clowder-ai.git",
     [string]$Branch = "main"
 )
 
 $ErrorActionPreference = "Stop"
 
-# ── Colors ──────────────────────────────────────────────────
 function Write-Step  { param([string]$msg) Write-Host "`n==> $msg" -ForegroundColor Cyan }
 function Write-Ok    { param([string]$msg) Write-Host "  [OK] $msg" -ForegroundColor Green }
 function Write-Warn  { param([string]$msg) Write-Host "  [!!] $msg" -ForegroundColor Yellow }
 function Write-Err   { param([string]$msg) Write-Host "  [ERR] $msg" -ForegroundColor Red }
 
-# ── Step 1: Detect OS & Shell ───────────────────────────────
-Write-Step "Step 1/9 — Detect OS & Shell"
+function Refresh-Path {
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" +
+                [System.Environment]::GetEnvironmentVariable("Path", "User")
+}
 
-$isWindows = $true
+# ── Step 1: Environment detection ──────────────────────────
+Write-Step "Step 1/9 - Detect environment"
+
 if ($PSVersionTable.PSVersion.Major -lt 5) {
     Write-Err "PowerShell 5.0+ required (current: $($PSVersionTable.PSVersion))"
     exit 1
 }
-Write-Ok "PowerShell $($PSVersionTable.PSVersion) on Windows"
+Write-Ok "PowerShell $($PSVersionTable.PSVersion)"
 
-# ── Step 2: Check prerequisites ─────────────────────────────
-Write-Step "Step 2/9 — Check prerequisites"
+$hasWinget = $null -ne (Get-Command winget -ErrorAction SilentlyContinue)
+if ($hasWinget) { Write-Ok "winget available" } else { Write-Warn "winget not found — manual install may be needed" }
 
-$missingDeps = @()
+# Git (required prerequisite per F113 spec)
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    Write-Err "Git not found. Install from https://git-scm.com/ and re-run."
+    exit 1
+}
+Write-Ok "Git: $(git --version)"
 
-# Node.js >= 20
-$nodeVersion = $null
+# ── Step 2: Node.js and pnpm ──────────────────────────────
+Write-Step "Step 2/9 - Node.js and pnpm"
+
+$nodeOk = $false
 try {
     $nodeRaw = & node --version 2>$null
     if ($nodeRaw -match 'v(\d+)\.') {
-        $nodeMajor = [int]$Matches[1]
-        if ($nodeMajor -ge 20) {
+        if ([int]$Matches[1] -ge 20) {
             Write-Ok "Node.js $nodeRaw"
-            $nodeVersion = $nodeRaw
+            $nodeOk = $true
         } else {
-            Write-Err "Node.js $nodeRaw (need >= 20)"
-            $missingDeps += "Node.js >= 20 (https://nodejs.org/)"
+            Write-Warn "Node.js $nodeRaw too old (need >= 20), upgrading..."
         }
     }
-} catch {
-    Write-Err "Node.js not found"
-    $missingDeps += "Node.js >= 20 (https://nodejs.org/)"
+} catch {}
+
+if (-not $nodeOk) {
+    if ($hasWinget) {
+        Write-Host "  Installing Node.js LTS via winget..."
+        winget install OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements --silent 2>$null
+        Refresh-Path
+        $nodeRaw = & node --version 2>$null
+        if ($nodeRaw) {
+            Write-Ok "Node.js $nodeRaw installed"
+            $nodeOk = $true
+        }
+    }
+    if (-not $nodeOk) {
+        Write-Err "Node.js >= 20 required. Install from https://nodejs.org/"
+        exit 1
+    }
 }
 
-# pnpm >= 8
+# pnpm: corepack → npm fallback
+$pnpmOk = $false
 try {
     $pnpmRaw = & pnpm --version 2>$null
-    if ($pnpmRaw -match '^(\d+)\.') {
-        $pnpmMajor = [int]$Matches[1]
-        if ($pnpmMajor -ge 8) {
-            Write-Ok "pnpm $pnpmRaw"
-        } else {
-            Write-Err "pnpm $pnpmRaw (need >= 8)"
-            $missingDeps += "pnpm >= 8 (npm i -g pnpm)"
-        }
+    if ($pnpmRaw -match '^(\d+)\.' -and [int]$Matches[1] -ge 8) {
+        Write-Ok "pnpm $pnpmRaw"
+        $pnpmOk = $true
     }
-} catch {
-    Write-Warn "pnpm not found — attempting install via corepack"
+} catch {}
+
+if (-not $pnpmOk) {
+    Write-Host "  Installing pnpm..."
     try {
         & corepack enable 2>$null
         & corepack prepare pnpm@latest --activate 2>$null
+        Refresh-Path
         $pnpmRaw = & pnpm --version 2>$null
-        Write-Ok "pnpm $pnpmRaw (installed via corepack)"
+        Write-Ok "pnpm $pnpmRaw (via corepack)"
+        $pnpmOk = $true
     } catch {
-        Write-Err "pnpm not found and corepack failed"
-        $missingDeps += "pnpm >= 8 (npm i -g pnpm)"
+        try {
+            & npm install -g pnpm 2>$null
+            Refresh-Path
+            $pnpmRaw = & pnpm --version 2>$null
+            Write-Ok "pnpm $pnpmRaw (via npm)"
+            $pnpmOk = $true
+        } catch {}
+    }
+    if (-not $pnpmOk) {
+        Write-Err "Could not install pnpm. Run: npm install -g pnpm"
+        exit 1
     }
 }
 
-# Git
-try {
-    $gitRaw = & git --version 2>$null
-    Write-Ok "Git: $gitRaw"
-} catch {
-    Write-Err "Git not found"
-    $missingDeps += "Git (https://git-scm.com/)"
-}
-
-if ($missingDeps.Count -gt 0) {
-    Write-Host ""
-    Write-Err "Missing prerequisites:"
-    foreach ($dep in $missingDeps) {
-        Write-Host "    - $dep" -ForegroundColor Red
-    }
-    Write-Host "`nInstall the above and re-run this script." -ForegroundColor Yellow
-    exit 1
-}
-
-# ── Step 3: Check optional dependencies ─────────────────────
-Write-Step "Step 3/9 — Check optional dependencies"
+# ── Step 3: Redis ──────────────────────────────────────────
+Write-Step "Step 3/9 - Redis"
 
 $hasRedis = $false
 if (-not $SkipRedis) {
-    # Check for Redis — Windows users typically use Memurai or WSL Redis
     try {
-        $redisRaw = & redis-cli --version 2>$null
-        Write-Ok "Redis CLI: $redisRaw"
+        $null = & redis-cli --version 2>$null
+        Write-Ok "Redis CLI available"
         $hasRedis = $true
     } catch {
         Write-Warn "Redis not found — will use in-memory storage (data lost on restart)"
-        Write-Warn "For persistent storage, install Redis (Memurai or WSL)"
+        Write-Warn "For persistent storage, install Redis for Windows:"
+        Write-Warn "  https://github.com/redis-windows/redis-windows"
     }
 } else {
     Write-Warn "Redis check skipped (-SkipRedis)"
 }
 
-# Claude CLI (optional — needed for AI agent features)
-$hasClaude = $false
-try {
-    $claudeRaw = & claude --version 2>$null
-    Write-Ok "Claude CLI: $claudeRaw"
-    $hasClaude = $true
-} catch {
-    Write-Warn "Claude CLI not found — AI agent features will be unavailable"
-    Write-Warn "Install: npm i -g @anthropic-ai/claude-code"
-}
+# ── Step 4: Clone and build ───────────────────────────────
+Write-Step "Step 4/9 - Clone and build"
 
-# ── Step 4: Clone or verify repository ──────────────────────
-Write-Step "Step 4/9 — Clone or verify repository"
-
-# Detect if we're already in the repo
 $inRepo = $false
 if (Test-Path "package.json") {
     $pkg = Get-Content "package.json" -Raw | ConvertFrom-Json
@@ -159,46 +152,130 @@ if (Test-Path "package.json") {
 }
 
 if (-not $inRepo) {
-    $targetDir = Join-Path (Get-Location) "cat-cafe"
+    $targetDir = Join-Path (Get-Location) "clowder-ai"
     if (Test-Path $targetDir) {
         Write-Ok "Directory exists: $targetDir"
         Set-Location $targetDir
     } else {
         Write-Host "  Cloning $RepoUrl ($Branch)..."
         & git clone --branch $Branch --single-branch $RepoUrl $targetDir
-        if ($LASTEXITCODE -ne 0) {
-            Write-Err "git clone failed"
-            exit 1
-        }
+        if ($LASTEXITCODE -ne 0) { Write-Err "git clone failed"; exit 1 }
         Set-Location $targetDir
         Write-Ok "Cloned to $targetDir"
     }
 }
 
-$ProjectRoot = Get-Location
+$ProjectRoot = (Get-Location).Path
 
-# ── Step 5: Install npm dependencies ────────────────────────
-Write-Step "Step 5/9 — Install dependencies (pnpm install)"
-
+# Install dependencies
+Write-Host "  Running pnpm install..."
 & pnpm install --frozen-lockfile 2>$null
 if ($LASTEXITCODE -ne 0) {
-    Write-Warn "Frozen lockfile failed, retrying with update..."
+    Write-Warn "Frozen lockfile failed, retrying..."
     & pnpm install
-    if ($LASTEXITCODE -ne 0) {
-        Write-Err "pnpm install failed"
-        exit 1
-    }
+    if ($LASTEXITCODE -ne 0) { Write-Err "pnpm install failed"; exit 1 }
 }
 Write-Ok "Dependencies installed"
 
-# ── Step 6: Generate .env ───────────────────────────────────
-Write-Step "Step 6/9 — Generate .env"
+# Build (shared → mcp-server → api → web)
+if (-not $SkipBuild) {
+    $buildSteps = @(
+        @{ Name = "shared";     Path = "packages/shared" },
+        @{ Name = "mcp-server"; Path = "packages/mcp-server" },
+        @{ Name = "api";        Path = "packages/api" },
+        @{ Name = "web";        Path = "packages/web" }
+    )
+    foreach ($step in $buildSteps) {
+        Write-Host "  Building $($step.Name)..."
+        Push-Location (Join-Path $ProjectRoot $step.Path)
+        & pnpm run build
+        if ($LASTEXITCODE -ne 0) { Write-Err "Build failed: $($step.Name)"; Pop-Location; exit 1 }
+        Pop-Location
+        Write-Ok "$($step.Name)"
+    }
+} else {
+    Write-Warn "Build skipped (-SkipBuild)"
+}
+
+# ── Step 5: Skills mount ──────────────────────────────────
+Write-Step "Step 5/9 - Skills mount"
+
+$skillsSource = Join-Path $ProjectRoot "cat-cafe-skills"
+$cliDirs = @("$env:USERPROFILE\.claude", "$env:USERPROFILE\.codex", "$env:USERPROFILE\.gemini")
+
+if (Test-Path $skillsSource) {
+    foreach ($cliDir in $cliDirs) {
+        $skillsTarget = Join-Path $cliDir "skills"
+        # Create parent dir if needed
+        if (-not (Test-Path $cliDir)) { New-Item -Path $cliDir -ItemType Directory -Force | Out-Null }
+
+        if (Test-Path $skillsTarget) {
+            Write-Ok "Skills already mounted: $skillsTarget"
+            continue
+        }
+
+        try {
+            # Prefer directory junction (no admin required)
+            cmd /c mklink /J "$skillsTarget" "$skillsSource" 2>$null | Out-Null
+            if (Test-Path $skillsTarget) {
+                Write-Ok "Skills mounted (junction): $skillsTarget"
+            } else {
+                throw "junction failed"
+            }
+        } catch {
+            Write-Warn "Could not create junction for $skillsTarget"
+            Write-Warn "Run as Administrator, or manually: mklink /J `"$skillsTarget`" `"$skillsSource`""
+        }
+    }
+} else {
+    Write-Warn "cat-cafe-skills/ not found — skills mount skipped"
+}
+
+# ── Step 6: AI CLI tools ─────────────────────────────────
+Write-Step "Step 6/9 - AI CLI tools"
+
+if (-not $SkipCli) {
+    $cliTools = @(
+        @{ Name = "Claude"; Cmd = "claude"; Pkg = "@anthropic-ai/claude-code" },
+        @{ Name = "Codex";  Cmd = "codex";  Pkg = "@openai/codex" }
+    )
+    foreach ($tool in $cliTools) {
+        $installed = $null -ne (Get-Command $tool.Cmd -ErrorAction SilentlyContinue)
+        if ($installed) {
+            Write-Ok "$($tool.Name) CLI already installed"
+        } else {
+            Write-Host "  Installing $($tool.Name) CLI..."
+            try {
+                & npm install -g $tool.Pkg 2>$null
+                Refresh-Path
+                if (Get-Command $tool.Cmd -ErrorAction SilentlyContinue) {
+                    Write-Ok "$($tool.Name) CLI installed"
+                } else {
+                    Write-Warn "$($tool.Name) CLI install may need PATH refresh — restart terminal"
+                }
+            } catch {
+                Write-Warn "Could not install $($tool.Name) CLI: npm install -g $($tool.Pkg)"
+            }
+        }
+    }
+} else {
+    Write-Warn "CLI tools install skipped (-SkipCli)"
+}
+
+# ── Step 7: Auth config placeholder ──────────────────────
+Write-Step "Step 7/9 - Auth config"
+Write-Warn "Authenticate CLI tools after installation:"
+Write-Warn "  Claude: run 'claude' and follow OAuth flow"
+Write-Warn "  Codex:  set OPENAI_API_KEY in .env"
+
+# ── Step 8: Generate .env ─────────────────────────────────
+Write-Step "Step 8/9 - Generate .env"
 
 $envFile = Join-Path $ProjectRoot ".env"
 $envExample = Join-Path $ProjectRoot ".env.example"
 
 if (Test-Path $envFile) {
-    Write-Ok ".env already exists — skipping (edit manually if needed)"
+    Write-Ok ".env already exists — skipping"
 } elseif (Test-Path $envExample) {
     Copy-Item $envExample $envFile
     Write-Ok ".env created from .env.example"
@@ -215,81 +292,41 @@ REDIS_URL=redis://localhost:6379
     Write-Ok "Minimal .env created"
 }
 
-# ── Step 7: Build all packages ──────────────────────────────
-Write-Step "Step 7/9 — Build packages"
+# ── Step 9: Verify and summarize ──────────────────────────
+Write-Step "Step 9/9 - Verify and launch"
 
-if ($SkipBuild) {
-    Write-Warn "Build skipped (-SkipBuild)"
-} else {
-    # Build order matters: shared → mcp-server → api (web uses next dev)
-    $buildSteps = @(
-        @{ Name = "shared";     Path = "packages/shared" },
-        @{ Name = "mcp-server"; Path = "packages/mcp-server" },
-        @{ Name = "api";        Path = "packages/api" }
-    )
-
-    foreach ($step in $buildSteps) {
-        $stepPath = Join-Path $ProjectRoot $step.Path
-        Write-Host "  Building $($step.Name)..."
-        Push-Location $stepPath
-        & pnpm run build
-        if ($LASTEXITCODE -ne 0) {
-            Write-Err "Build failed for $($step.Name)"
-            Pop-Location
-            exit 1
-        }
-        Pop-Location
-        Write-Ok "$($step.Name) built"
-    }
-}
-
-# ── Step 8: Verify build artifacts ──────────────────────────
-Write-Step "Step 8/9 — Verify build artifacts"
-
-$artifacts = @(
-    "packages/shared/dist",
-    "packages/mcp-server/dist/index.js",
-    "packages/api/dist/index.js"
-)
-
+$artifacts = @("packages/shared/dist", "packages/mcp-server/dist/index.js",
+               "packages/api/dist/index.js", "packages/web/.next")
 $allGood = $true
 foreach ($artifact in $artifacts) {
     $fullPath = Join-Path $ProjectRoot $artifact
-    if (Test-Path $fullPath) {
-        Write-Ok "$artifact"
-    } else {
-        Write-Err "$artifact — missing!"
-        $allGood = $false
-    }
+    if (Test-Path $fullPath) { Write-Ok $artifact }
+    else { Write-Err "$artifact - missing!"; $allGood = $false }
 }
 
 if (-not $allGood -and -not $SkipBuild) {
-    Write-Err "Some build artifacts are missing. Check the build output above."
+    Write-Err "Build artifacts missing. Check build output above."
     exit 1
 }
 
-# ── Step 9: Success summary ─────────────────────────────────
-Write-Step "Step 9/9 — Installation complete!"
+$hasClaude = $null -ne (Get-Command claude -ErrorAction SilentlyContinue)
+$hasCodex = $null -ne (Get-Command codex -ErrorAction SilentlyContinue)
 
 Write-Host ""
 Write-Host "  ========================================" -ForegroundColor Green
-Write-Host "  Clowder AI installed successfully!" -ForegroundColor Green
+Write-Host "  Clowder AI installed!" -ForegroundColor Green
 Write-Host "  ========================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "  Project: $ProjectRoot"
-Write-Host "  Node:    $nodeVersion"
-Write-Host "  Redis:   $(if ($hasRedis) { 'available' } else { 'not found (use --memory)' })"
-Write-Host "  Claude:  $(if ($hasClaude) { 'available' } else { 'not installed' })"
+Write-Host "  Node:    $(node --version)"
+Write-Host "  Redis:   $(if ($hasRedis) { 'available' } else { 'not found (use -Memory)' })"
+Write-Host "  Claude:  $(if ($hasClaude) { 'ready' } else { 'not installed' })"
+Write-Host "  Codex:   $(if ($hasCodex) { 'ready' } else { 'not installed' })"
 Write-Host ""
-Write-Host "  Next steps:" -ForegroundColor Cyan
-Write-Host "    1. Edit .env with your API keys"
-Write-Host "    2. Start the app:"
+Write-Host "  Start the app:" -ForegroundColor Cyan
+$startCmd = ".\scripts\start-windows.ps1"
+if (-not $hasRedis) { $startCmd += " -Memory" }
+Write-Host "    $startCmd" -ForegroundColor White
 Write-Host ""
-if ($hasRedis) {
-    Write-Host "       .\scripts\start-windows.ps1" -ForegroundColor White
-} else {
-    Write-Host "       .\scripts\start-windows.ps1 -Memory" -ForegroundColor White
-}
-Write-Host ""
-Write-Host "    3. Open http://localhost:3003 in your browser"
+Write-Host "  Then open http://localhost:3003" -ForegroundColor Cyan
 Write-Host ""

@@ -79,9 +79,20 @@ export function resolveCmdShimScript(command: string): string | null {
 
 /**
  * Escape a command-line argument for Windows cmd.exe shell mode.
- * Wraps in double quotes and escapes internal special characters.
+ *
+ * cmd.exe interprets: & | < > ^ % " and whitespace.
+ * Strategy: wrap in double quotes, escape internal `"` as `\"`,
+ * and caret-escape all remaining cmd.exe metacharacters inside the quotes.
+ * `%` is doubled to `%%` to prevent env-var expansion.
  */
 export function escapeCmdArg(arg: string): string {
-  if (!/[\s"&|<>^%]/.test(arg)) return arg;
-  return `"${arg.replace(/"/g, '\\"')}"`;
+  if (!/[\s"&|<>^%!]/.test(arg)) return arg;
+  // 1. Escape internal double quotes for the C runtime
+  let escaped = arg.replace(/"/g, '\\"');
+  // 2. Double % to prevent cmd.exe env-var expansion
+  escaped = escaped.replace(/%/g, '%%');
+  // 3. Caret-escape cmd.exe metacharacters (inside double quotes,
+  //    only ^, !, and sometimes & need escaping; belt-and-suspenders)
+  escaped = escaped.replace(/([&|<>^!])/g, '^$1');
+  return `"${escaped}"`;
 }
