@@ -23,7 +23,7 @@ function buildQueuedMessageIds(queue: QueueEntry[]): Set<string> {
   return ids;
 }
 
-/** Mirrors the queuedContentCounts logic in ChatContainer (ID-aware, merged-aware) */
+/** Mirrors the queuedContentCounts logic in ChatContainer (always generates quota) */
 function buildQueuedContentCounts(queue: QueueEntry[]): Map<string, number> {
   const counts = new Map<string, number>();
   const bump = (k: string) => counts.set(k, (counts.get(k) ?? 0) + 1);
@@ -32,13 +32,10 @@ function buildQueuedContentCounts(queue: QueueEntry[]): Map<string, number> {
     if (!entry.content) continue;
     if (entry.mergedMessageIds.length > 0) {
       const segments = entry.content.split('\n');
-      if (!entry.messageId && segments[0]) bump(segments[0]);
-      for (let i = 1; i < segments.length; i++) {
-        if (i - 1 >= entry.mergedMessageIds.length && segments[i]) {
-          bump(segments[i]);
-        }
+      for (const seg of segments) {
+        if (seg) bump(seg);
       }
-    } else if (!entry.messageId) {
+    } else {
       bump(entry.content);
     }
   }
@@ -53,7 +50,12 @@ function filterMessages(
 ): ChatMessage[] {
   const quota = new Map(queuedContentCounts);
   return messages.filter((m) => {
-    if (queuedIds.has(m.id)) return false;
+    if (queuedIds.has(m.id)) {
+      // Consume content quota so it doesn't leak to unrelated optimistic sends.
+      const q = quota.get(m.content) ?? 0;
+      if (q > 0) quota.set(m.content, q - 1);
+      return false;
+    }
     if (m.id.startsWith('user-') && m.type === 'user') {
       const q = quota.get(m.content) ?? 0;
       if (q > 0) {
@@ -230,20 +232,44 @@ describe('#20: queued message filtering', () => {
     expect(visible.map((m) => m.id)).toEqual(['user-rrr']);
   });
 
-  it('does not hide force-sent message whose content is a substring of queued merged content', () => {
-    // Queue has merged content "a\nb" with both IDs backfilled. User force-sends "b".
-    // "b" should NOT be hidden — mergedMessageIds already covers the merged "b".
-    const messages = [{ id: 'user-sss', type: 'user', content: 'b', timestamp: NOW } as ChatMessage];
+  it('does not hide force-sent message when merged entry IDs consume quota', () => {
+    // Queue has merged content "a\nb" with both IDs backfilled. The store has
+    // both server-ID messages AND a force-sent "b". The ID-matched messages
+    // consume their segment quota, so the force-send stays visible.
+    const messages = [
+      { id: 'm1', type: 'user', content: 'a', timestamp: NOW } as ChatMessage,
+      { id: 'm2', type: 'user', content: 'b', timestamp: NOW } as ChatMessage,
+      { id: 'user-sss', type: 'user', content: 'b', timestamp: NOW } as ChatMessage,
+    ];
     const queue = [makeQueueEntry({ content: 'a\nb', messageId: 'm1', mergedMessageIds: ['m2'] })];
     const queuedIds = buildQueuedMessageIds(queue);
     const queuedContents = buildQueuedContentCounts(queue);
     const visible = filterMessages(messages, queuedIds, queuedContents);
 
-    // Both IDs covered → no content quota → "b" stays visible
+    // m1 hidden by ID (consumes "a" quota), m2 hidden by ID (consumes "b" quota)
+    // user-sss: "b" quota=0 → stays visible
     expect(visible.map((m) => m.id)).toEqual(['user-sss']);
   });
 
   // ── ID-covered entries skip content quota ──
+
+  // ── P1 race window: queue has server ID but store has optimistic ID ──
+
+  it('hides optimistic bubble in race window when messageId is backfilled but store not yet swapped', () => {
+    // Race window: server backfilled messageId="server-abc" in queue, but
+    // store still has "user-xxx" (replaceThreadMessageId hasn't fired yet).
+    // Content quota catches the optimistic bubble.
+    const messages = [
+      { id: 'user-xxx', type: 'user', content: 'hello', timestamp: NOW } as ChatMessage,
+    ];
+    const queue = [makeQueueEntry({ content: 'hello', messageId: 'server-abc' })];
+    const queuedIds = buildQueuedMessageIds(queue);
+    const queuedContents = buildQueuedContentCounts(queue);
+    const visible = filterMessages(messages, queuedIds, queuedContents);
+
+    // user-xxx not in queuedIds (which has server-abc), but content "hello" quota=1 → hidden
+    expect(visible.map((m) => m.id)).toEqual([]);
+  });
 
   it('does not consume content quota when entry already has messageId', () => {
     // Queue entry has messageId backfilled (server-abc), content "hello".
@@ -263,11 +289,10 @@ describe('#20: queued message filtering', () => {
 
   // ── Merged entry optimistic segments ──
 
-  it('hides optimistic bubble for merged entry segment not yet ID-covered', () => {
+  it('hides both optimistic bubbles for merged entry in race window', () => {
     // Merged entry: content "a\nb", messageId=null (first still optimistic),
-    // mergedMessageIds=["server-b"] (second already backfilled by server).
-    // The first segment ("a") has no server ID yet → needs content fallback.
-    // The second segment ("b") has server ID "server-b" → handled by ID filter.
+    // mergedMessageIds=["server-b"] (second backfilled but store still has user-bbb).
+    // During the race window, both optimistic bubbles should be hidden by content quota.
     const messages = [
       { id: 'user-aaa', type: 'user', content: 'a', timestamp: NOW } as ChatMessage,
       { id: 'user-bbb', type: 'user', content: 'b', timestamp: NOW } as ChatMessage,
@@ -277,16 +302,18 @@ describe('#20: queued message filtering', () => {
     const queuedContents = buildQueuedContentCounts(queue);
     const visible = filterMessages(messages, queuedIds, queuedContents);
 
-    // user-aaa: hidden by content quota for "a" (first segment, messageId null)
-    // user-bbb: stays visible (not in queuedIds, "b" has no content quota since
-    //           segment index 1 is covered by mergedMessageIds[0])
-    expect(visible.map((m) => m.id)).toEqual(['user-bbb']);
+    // user-aaa: hidden by content quota for "a"
+    // user-bbb: hidden by content quota for "b" (race window: store has user-bbb,
+    //           queuedIds has server-b — content fallback covers the gap)
+    expect(visible.map((m) => m.id)).toEqual([]);
   });
 
-  it('hides third segment when only first two are ID-covered in triple merge', () => {
+  it('hides uncovered third segment in triple merge after ID matches consume quota', () => {
     // Triple merge: content "a\nb\nc", messageId="server-a" (first covered),
     // mergedMessageIds=["server-b"] (second covered), third still optimistic.
     const messages = [
+      { id: 'server-a', type: 'user', content: 'a', timestamp: NOW } as ChatMessage,
+      { id: 'server-b', type: 'user', content: 'b', timestamp: NOW } as ChatMessage,
       { id: 'user-ccc', type: 'user', content: 'c', timestamp: NOW } as ChatMessage,
       { id: 'user-extra', type: 'user', content: 'c', timestamp: NOW } as ChatMessage,
     ];
@@ -295,16 +322,18 @@ describe('#20: queued message filtering', () => {
     const queuedContents = buildQueuedContentCounts(queue);
     const visible = filterMessages(messages, queuedIds, queuedContents);
 
-    // Only segment "c" (index 2) is uncovered → quota=1 for "c"
-    // user-ccc: hidden by content quota
-    // user-extra: stays visible (quota exhausted)
+    // server-a hidden by ID (consumes "a"), server-b hidden by ID (consumes "b")
+    // user-ccc: content "c" quota=1 → hidden
+    // user-extra: content "c" quota=0 → stays visible
     expect(visible.map((m) => m.id)).toEqual(['user-extra']);
   });
 
-  it('skips all segments when merged entry is fully ID-covered', () => {
+  it('ID-covered merge consumes all segment quota, leaving force-sends visible', () => {
     // Merged entry: content "a\nb", messageId="server-a", mergedMessageIds=["server-b"]
-    // Both covered by server IDs → no content quota at all.
+    // Both server-ID messages in store consume their segment quota on ID match.
     const messages = [
+      { id: 'server-a', type: 'user', content: 'a', timestamp: NOW } as ChatMessage,
+      { id: 'server-b', type: 'user', content: 'b', timestamp: NOW } as ChatMessage,
       { id: 'user-force-a', type: 'user', content: 'a', timestamp: NOW } as ChatMessage,
       { id: 'user-force-b', type: 'user', content: 'b', timestamp: NOW } as ChatMessage,
     ];
@@ -313,7 +342,8 @@ describe('#20: queued message filtering', () => {
     const queuedContents = buildQueuedContentCounts(queue);
     const visible = filterMessages(messages, queuedIds, queuedContents);
 
-    // No content quota → both force-sends stay visible
+    // server-a/b hidden by ID (consuming "a" and "b" quota respectively)
+    // user-force-a/b: quota exhausted → both stay visible
     expect(visible.map((m) => m.id)).toEqual(['user-force-a', 'user-force-b']);
   });
 });

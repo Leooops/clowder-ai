@@ -304,25 +304,18 @@ export function ChatContainer({ threadId }: ChatContainerProps) {
     for (const entry of queueRaw) {
       if (entry.status !== 'queued') continue;
       if (!entry.content) continue;
-      // #20: Content fallback only needed for messages still in the optimistic
-      // ID window (user-xxx not yet swapped to server ID). If messageId is
-      // already backfilled, the ID filter handles it — skip content quota to
-      // avoid falsely hiding unrelated optimistic sends with matching text.
+      // #20: Always generate content quota — needed during the optimistic ID
+      // window (WS queue_updated arrives before HTTP response triggers
+      // replaceThreadMessageId, so queue has server IDs but store still has
+      // user-xxx). The filtering loop consumes quota when hiding by ID match
+      // too, preventing leftover quota from falsely hiding unrelated sends.
       if (entry.mergedMessageIds.length > 0) {
-        // Merged entry: content is "a\nb\nc". Each segment corresponds to one
-        // send. Only add segments whose server ID isn't yet known (not in
-        // messageId or mergedMessageIds — i.e. still optimistic user-xxx).
-        // messageId covers the first segment, mergedMessageIds[i] covers
-        // segment i+1.
+        // Merged entry: content is "a\nb\nc". Each segment = one send.
         const segments = entry.content.split('\n');
-        if (!entry.messageId && segments[0]) bump(segments[0]);
-        for (let i = 1; i < segments.length; i++) {
-          if (i - 1 >= entry.mergedMessageIds.length && segments[i]) {
-            bump(segments[i]);
-          }
+        for (const seg of segments) {
+          if (seg) bump(seg);
         }
-      } else if (!entry.messageId) {
-        // Non-merged: only need content fallback if messageId not yet set.
+      } else {
         bump(entry.content);
       }
     }
@@ -341,7 +334,12 @@ export function ChatContainer({ threadId }: ChatContainerProps) {
       // #20: Skip messages whose queue entry is still 'queued'.
       // Messages in 'processing' are NOT filtered — they must be visible in the chat stream.
       // Also catch optimistic messages (user-xxx) via content match before ID swap completes.
-      if (queuedMessageIds.has(msg.id)) continue;
+      if (queuedMessageIds.has(msg.id)) {
+        // Consume content quota so it doesn't leak to unrelated optimistic sends.
+        const q = contentHideQuota.get(msg.content) ?? 0;
+        if (q > 0) contentHideQuota.set(msg.content, q - 1);
+        continue;
+      }
       if (msg.id.startsWith('user-') && msg.type === 'user') {
         const quota = contentHideQuota.get(msg.content) ?? 0;
         if (quota > 0) {
@@ -374,7 +372,12 @@ export function ChatContainer({ threadId }: ChatContainerProps) {
     if (queuedMessageIds.size === 0 && queuedContentCounts.size === 0) return messages;
     const quota = new Map(queuedContentCounts);
     return messages.filter((m) => {
-      if (queuedMessageIds.has(m.id)) return false;
+      if (queuedMessageIds.has(m.id)) {
+        // Consume content quota so it doesn't leak to unrelated optimistic sends.
+        const q = quota.get(m.content) ?? 0;
+        if (q > 0) quota.set(m.content, q - 1);
+        return false;
+      }
       if (m.id.startsWith('user-') && m.type === 'user') {
         const q = quota.get(m.content) ?? 0;
         if (q > 0) {
