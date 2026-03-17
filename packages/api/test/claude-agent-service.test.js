@@ -200,6 +200,40 @@ test('passes cwd from workingDirectory option', async () => {
   assert.equal(spawnOpts.cwd, '/my/project');
 });
 
+test('preserves inherited Anthropic credentials when no profile mode override is supplied', async () => {
+  const prevApiKey = process.env.ANTHROPIC_API_KEY;
+  const prevBaseUrl = process.env.ANTHROPIC_BASE_URL;
+  process.env.ANTHROPIC_API_KEY = 'sk-inherited';
+  process.env.ANTHROPIC_BASE_URL = 'https://inherited.example.com';
+
+  const proc = createMockProcess();
+  const spawnFn = createMockSpawnFn(proc);
+  const service = new ClaudeAgentService({ spawnFn });
+
+  try {
+    const promise = collect(
+      service.invoke('hello', {
+        callbackEnv: {
+          CAT_CAFE_API_URL: 'http://localhost:3003',
+          CAT_CAFE_INVOCATION_ID: 'inv-keep',
+          CAT_CAFE_CALLBACK_TOKEN: 'token-keep',
+        },
+      }),
+    );
+    emitClaudeEvents(proc, [{ type: 'result', subtype: 'success' }]);
+    await promise;
+
+    const spawnOpts = spawnFn.mock.calls[0].arguments[2];
+    assert.equal(spawnOpts.env.ANTHROPIC_API_KEY, 'sk-inherited');
+    assert.equal(spawnOpts.env.ANTHROPIC_BASE_URL, 'https://inherited.example.com');
+  } finally {
+    if (prevApiKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = prevApiKey;
+    if (prevBaseUrl === undefined) delete process.env.ANTHROPIC_BASE_URL;
+    else process.env.ANTHROPIC_BASE_URL = prevBaseUrl;
+  }
+});
+
 test('F062: subscription profile clears inherited ANTHROPIC env vars', async () => {
   const prevApiKey = process.env.ANTHROPIC_API_KEY;
   const prevBaseUrl = process.env.ANTHROPIC_BASE_URL;

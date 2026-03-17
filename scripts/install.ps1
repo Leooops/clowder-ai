@@ -150,9 +150,16 @@ if (-not $nodeOk) {
             winget install OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements --silent 2>$null
             Refresh-Path
             $nodeRaw = & node --version 2>$null
-            if ($nodeRaw) {
-                Write-Ok "Node.js $nodeRaw installed"
-                $nodeOk = $true
+            if ($nodeRaw -match 'v(\d+)\.(\d+)') {
+                $nodeMajor = [int]$Matches[1]
+                if ($nodeMajor -ge 20) {
+                    Write-Ok "Node.js $nodeRaw installed"
+                    $nodeOk = $true
+                } else {
+                    Write-Warn "Node.js $nodeRaw still too old after winget install"
+                }
+            } else {
+                Write-Warn "Could not verify Node.js version after winget install"
             }
         } catch {
             Exit-InstallerIfCancelled -ErrorRecord $_ -Context "Node.js installation"
@@ -223,7 +230,7 @@ Write-Step "Step 3/9 - Redis"
 if ($Memory) {
     Write-Warn "Windows installer no longer offers memory mode - continuing with Redis setup"
 }
-$redisPlan = Resolve-InstallerRedisPlan
+$redisPlan = Resolve-InstallerRedisPlan -ProjectRoot $ProjectRoot
 $hasRedis = Apply-InstallerRedisPlan -State $authState -ProjectRoot $ProjectRoot -Plan $redisPlan
 if (-not $hasRedis) {
     Write-Err "Redis setup failed. Install Redis locally or rerun and choose an external Redis URL."

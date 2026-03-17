@@ -124,15 +124,49 @@ function Select-InstallerMultiChoice {
     }
 }
 
+function Get-InstallerEnvValueFromFile {
+    param([string]$EnvFile, [string]$Key)
+    if (-not $EnvFile -or -not (Test-Path $EnvFile)) {
+        return ""
+    }
+    foreach ($rawLine in (Get-Content $EnvFile)) {
+        $line = $rawLine.Trim()
+        if (-not $line -or $line.StartsWith("#")) {
+            continue
+        }
+        $parts = $line -split "=", 2
+        if ($parts.Count -ne 2) {
+            continue
+        }
+        if ($parts[0].Trim() -ne $Key) {
+            continue
+        }
+        return $parts[1].Trim().Trim('"').Trim("'")
+    }
+    return ""
+}
+
+function Get-InstallerExternalRedisUrl {
+    param([string]$ProjectRoot)
+    if ($env:REDIS_URL) {
+        return $env:REDIS_URL.Trim()
+    }
+    return (Get-InstallerEnvValueFromFile -EnvFile (Join-Path $ProjectRoot ".env") -Key "REDIS_URL")
+}
+
 function Resolve-InstallerRedisPlan {
+    param([string]$ProjectRoot)
+    $defaultRedisUrl = Get-InstallerExternalRedisUrl -ProjectRoot $ProjectRoot
     $mode = if (Test-InstallerConsoleUi) {
         Select-InstallerChoice -Title "Redis setup" -Prompt "Choose how this workspace should store runtime data" -Options @(
             @{ Label = "&Install Redis locally (recommended)"; Help = "Download or reuse the project-local portable Redis bundle"; Value = "portable" },
             @{ Label = "&Use external Redis URL"; Help = "Use an existing external Redis instance"; Value = "external" }
         )
-    } else { "portable" }
+    } elseif ($defaultRedisUrl) { "external" } else { "portable" }
 
-    $redisUrl = if ($mode -eq "external") { Read-Host "  External Redis URL" } else { "" }
+    $redisUrl = if ($mode -eq "external") {
+        if (Test-InstallerConsoleUi) { Read-Host "  External Redis URL" } else { $defaultRedisUrl }
+    } else { "" }
     if ($mode -eq "external" -and -not $redisUrl) {
         Write-Warn "External Redis URL empty - using local Redis setup"
         $mode = "portable"

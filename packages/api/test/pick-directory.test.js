@@ -51,6 +51,18 @@ describe('getPickDirectoryCommand()', () => {
   });
 });
 
+describe('normalizePickedDirectoryPath()', () => {
+  it('preserves Windows drive roots', () => {
+    assert.equal(mod.normalizePickedDirectoryPath('C:\\'), 'C:\\');
+    assert.equal(mod.normalizePickedDirectoryPath('D:/'), 'D:\\');
+  });
+
+  it('trims trailing separators from non-root directories', () => {
+    assert.equal(mod.normalizePickedDirectoryPath('C:\\workspace\\clowder-ai\\'), 'C:\\workspace\\clowder-ai');
+    assert.equal(mod.normalizePickedDirectoryPath('/tmp/demo/'), '/tmp/demo');
+  });
+});
+
 describe('POST /api/projects/pick-directory', () => {
   it('returns 401 without identity header', async () => {
     const app = await buildApp();

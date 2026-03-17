@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
@@ -160,5 +160,29 @@ test('claude-profile create and remove keeps installer-managed profile in sync',
     assert.equal('installer-managed' in (secretsAfterRemove.providers.anthropic ?? {}), false);
   } finally {
     rmSync(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test('env-apply writes apostrophes with dotenv-compatible double quotes', () => {
+  const envRoot = mkdtempSync(join(tmpdir(), 'clowder-install-env-apostrophe-'));
+
+  try {
+    const envFile = join(envRoot, '.env');
+    mkdirSync(envRoot, { recursive: true });
+    writeFileSync(envFile, '', 'utf8');
+
+    runHelper([
+      'env-apply',
+      '--env-file',
+      envFile,
+      '--set',
+      "OPENAI_BASE_URL=https://proxy.example/o'hara",
+    ]);
+
+    const output = readFileSync(envFile, 'utf8');
+    assert.match(output, /^OPENAI_BASE_URL="https:\/\/proxy\.example\/o'hara"$/m);
+    assert.doesNotMatch(output, /'\\''/);
+  } finally {
+    rmSync(envRoot, { recursive: true, force: true });
   }
 });

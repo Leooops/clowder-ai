@@ -49,7 +49,11 @@ function getOptional(values, key, fallback = '') {
 }
 
 function envQuote(value) {
-  return `'${String(value).replace(/'/g, `'\\''`)}'`;
+  const stringValue = String(value);
+  if (!stringValue.includes("'")) {
+    return `'${stringValue}'`;
+  }
+  return `"${stringValue.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
 function applyEnvChanges(envFile, setPairs, deleteKeys) {

@@ -108,7 +108,7 @@ function buildClaudeEnvOverrides(callbackEnv?: Record<string, string>): Record<s
     const baseUrl = callbackEnv?.[ANTHROPIC_PROFILE_BASE_URL]?.trim();
     if (apiKey) env.ANTHROPIC_API_KEY = apiKey;
     if (baseUrl) env.ANTHROPIC_BASE_URL = baseUrl;
-  } else {
+  } else if (mode === 'subscription') {
     // Subscription mode: explicitly clear inherited key-based env vars.
     env.ANTHROPIC_API_KEY = null;
     env.ANTHROPIC_BASE_URL = null;

@@ -14,6 +14,13 @@ $ErrorActionPreference = "Continue"
 function Write-Ok   { param([string]$msg) Write-Host "  [OK] $msg" -ForegroundColor Green }
 function Write-Warn { param([string]$msg) Write-Host "  [!!] $msg" -ForegroundColor Yellow }
 
+$ScriptPath = if ($PSCommandPath) { $PSCommandPath } elseif ($MyInvocation.MyCommand.Path) { $MyInvocation.MyCommand.Path } else { $null }
+$ScriptDir = if ($ScriptPath) { Split-Path -Parent $ScriptPath } else { $null }
+if ($ScriptDir) {
+    . (Join-Path $ScriptDir "install-windows-helpers.ps1")
+}
+$ProjectRoot = if ($ScriptDir) { Split-Path -Parent $ScriptDir } else { $null }
+
 Write-Host "Cat Cafe - Stopping services" -ForegroundColor Cyan
 Write-Host "============================="
 
@@ -58,10 +65,22 @@ Stop-PortProcess -Port $ApiPort -Name "API Server"
 Stop-PortProcess -Port $WebPort -Name "Frontend"
 
 # Stop Redis if running on our port
+$redisCommands = $null
+if ($ProjectRoot) {
+    $redisCommands = Resolve-PortableRedisBinaries -ProjectRoot $ProjectRoot
+}
+if (-not $redisCommands) {
+    $redisCommands = Resolve-GlobalRedisBinaries
+}
+
 try {
-    $redisPing = & redis-cli -p $RedisPort ping 2>$null
+    if (-not $redisCommands -or -not $redisCommands.CliPath) {
+        throw "redis-cli unavailable"
+    }
+    $redisCli = $redisCommands.CliPath
+    $redisPing = & $redisCli -p $RedisPort ping 2>$null
     if ($redisPing -eq "PONG") {
-        & redis-cli -p $RedisPort shutdown save 2>$null
+        & $redisCli -p $RedisPort shutdown save 2>$null
         Write-Ok "Redis stopped (port $RedisPort)"
     } else {
         Write-Warn "Redis (port $RedisPort) - not running"

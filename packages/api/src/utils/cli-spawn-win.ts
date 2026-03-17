@@ -56,18 +56,17 @@ export function resolveCmdShimScript(command: string): string | null {
       encoding: 'utf-8',
       timeout: 5000,
     }).trim();
-    const cmdPath = whereOutput.split(/\r?\n/)[0];
-    if (cmdPath && existsSync(cmdPath)) {
+    for (const cmdPath of whereOutput.split(/\r?\n/)) {
+      if (!cmdPath || !existsSync(cmdPath)) continue;
       const shimContent = readFileSync(cmdPath, 'utf-8');
-      // npm .cmd shims use: "%~dp0\node_modules\...\cli.js" or similar
-      const match = shimContent.match(/%~dp0\\?(.*?\.js)["'\s]/);
-      if (match) {
-        const shimDir = cmdPath.replace(/[/\\][^/\\]+$/, '');
-        const scriptPath = join(shimDir, match[1]);
-        if (existsSync(scriptPath)) {
-          resolvedShimCache.set(command, scriptPath);
-          return scriptPath;
-        }
+      // npm .cmd shims use "%~dp0\..." or "%dp0\..." relative script targets
+      const match = shimContent.match(/%~?dp0\\?(.*?\.js)["'\s]/i);
+      if (!match) continue;
+      const shimDir = cmdPath.replace(/[/\\][^/\\]+$/, '');
+      const scriptPath = join(shimDir, match[1].replace(/\\/g, '/'));
+      if (existsSync(scriptPath)) {
+        resolvedShimCache.set(command, scriptPath);
+        return scriptPath;
       }
     }
   } catch {

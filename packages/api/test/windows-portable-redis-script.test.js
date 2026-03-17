@@ -63,6 +63,16 @@ test('Windows installer treats winget Node install failures as retryable instead
   assert.ok(fallbackWarnIndex < manualInstallIndex, 'expected manual install fallback after protected winget path');
 });
 
+test('Windows installer revalidates Node major version after winget install', () => {
+  assert.ok(
+    installScript.includes("if ($nodeRaw -match 'v(\\d+)\\.(\\d+)') {"),
+    'expected Node.js version check to rerun after winget install',
+  );
+  assert.match(installScript, /\$nodeMajor = \[int\]\$Matches\[1\]/);
+  assert.match(installScript, /if \(\$nodeMajor -ge 20\) \{/);
+  assert.match(installScript, /Write-Warn "Node\.js \$nodeRaw still too old after winget install"/);
+});
+
 test('Windows installer retries plain pnpm install when frozen lockfile mode hits a native command error', () => {
   const frozenInstallIndex = installScript.indexOf('Invoke-Pnpm -CommandArgs @("install", "--frozen-lockfile") 2>$null');
   const tryIndex = installScript.lastIndexOf('try {', frozenInstallIndex);
@@ -210,6 +220,14 @@ test('Windows CLI installs use the explicit npm command path and Redis mode only
   assert.doesNotMatch(uiHelpersScript, /Value = "memory"/);
   assert.doesNotMatch(uiHelpersScript, /using memory storage/);
   assert.doesNotMatch(uiHelpersScript, /Write-Warn "Memory mode — data will be lost on restart"/);
+  assert.match(installScript, /Resolve-InstallerRedisPlan -ProjectRoot \$ProjectRoot/);
+});
+
+test('Windows installer headless Redis planning respects existing external Redis defaults', () => {
+  assert.match(uiHelpersScript, /function Get-InstallerExternalRedisUrl/);
+  assert.match(uiHelpersScript, /Get-InstallerEnvValueFromFile -EnvFile \(Join-Path \$ProjectRoot "\.env"\) -Key "REDIS_URL"/);
+  assert.match(uiHelpersScript, /\} elseif \(\$defaultRedisUrl\) \{ "external" \} else \{ "portable" \}/);
+  assert.match(uiHelpersScript, /if \(Test-InstallerConsoleUi\) \{ Read-Host "  External Redis URL" \} else \{ \$defaultRedisUrl \}/);
 });
 
 test('Windows installer exits immediately when native installs are cancelled by the user', () => {
@@ -273,6 +291,22 @@ test('Windows startup resolves portable Redis from the shared helper before glob
   assert.match(helpersScript, /Get-Command redis-server -ErrorAction SilentlyContinue/);
 });
 
+test('Windows startup preserves runtime Redis overrides, validates artifacts, and exits when service jobs stop', () => {
+  assert.match(startWindowsScript, /\$configuredRedisUrl = if \(\$env:REDIS_URL\)/);
+  assert.match(startWindowsScript, /\$useExternalRedis = \$useRedis -and \$configuredRedisUrl -and \(\$LocalRedisUrls -notcontains \$configuredRedisUrl\)/);
+  assert.match(startWindowsScript, /Write-Ok "Using external Redis: \$configuredRedisUrl"/);
+  assert.match(startWindowsScript, /\$runtimeEnvOverrides = @\{/);
+  assert.match(startWindowsScript, /REDIS_URL = \$env:REDIS_URL/);
+  assert.match(startWindowsScript, /MEMORY_STORE = \$env:MEMORY_STORE/);
+  assert.match(startWindowsScript, /\$apiEntry = Join-Path \$ProjectRoot "packages\/api\/dist\/index\.js"/);
+  assert.match(startWindowsScript, /API build artifact not found - run without -Quick first to build/);
+  assert.match(startWindowsScript, /Build failed: shared/);
+  assert.match(startWindowsScript, /Build failed: mcp-server/);
+  assert.match(startWindowsScript, /Build failed: api/);
+  assert.match(startWindowsScript, /Build failed: web/);
+  assert.match(startWindowsScript, /Service job '\$\(\$job.Name\)' stopped \(\$\(\$job.State\)\)/);
+});
+
 test('Windows installer and startup reuse shared tool resolution instead of raw pnpm PATH lookups', () => {
   assert.match(installScript, /Resolve-ToolCommand -Name "pnpm"/);
   assert.match(installScript, /\$corepackCommand = Resolve-ToolCommand -Name "corepack"/);
@@ -294,6 +328,14 @@ test('Windows CLI installs retry command discovery before warning and auth detec
   assert.match(helpersScript, /Resolve-ToolCommandWithRetry -Name "claude" -Attempts 6/);
   assert.match(helpersScript, /Resolve-ToolCommandWithRetry -Name "codex" -Attempts 6/);
   assert.match(helpersScript, /Resolve-ToolCommandWithRetry -Name "gemini" -Attempts 6/);
+});
+
+test('Windows stop script resolves redis-cli through the shared helper chain before shutdown', () => {
+  assert.match(stopWindowsScript, /install-windows-helpers\.ps1/);
+  assert.match(stopWindowsScript, /Resolve-PortableRedisBinaries -ProjectRoot \$ProjectRoot/);
+  assert.match(stopWindowsScript, /Resolve-GlobalRedisBinaries/);
+  assert.match(stopWindowsScript, /\$redisCli = \$redisCommands\.CliPath/);
+  assert.doesNotMatch(stopWindowsScript, /& redis-cli -p \$RedisPort ping/);
 });
 
 test('Windows start.bat delegates to start-windows.ps1', () => {

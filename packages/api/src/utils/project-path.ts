@@ -42,7 +42,16 @@ export function getDefaultRootsForPlatform(
   return [...roots];
 }
 
-const DEFAULT_ROOTS = (): string[] => getDefaultRootsForPlatform();
+const defaultRootsCache = new Map<string, string[]>();
+
+const DEFAULT_ROOTS = (): string[] => {
+  const platformName = platform();
+  const cached = defaultRootsCache.get(platformName);
+  if (cached) return cached;
+  const roots = getDefaultRootsForPlatform(platformName);
+  defaultRootsCache.set(platformName, roots);
+  return roots;
+};
 
 const ALLOWED_ROOTS = (): string[] => {
   const envRoots = process.env['PROJECT_ALLOWED_ROOTS'];

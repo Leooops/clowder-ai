@@ -72,6 +72,7 @@ Write-Ok "pnpm: $pnpmCommand"
 $ApiPort = if ($env:API_SERVER_PORT) { $env:API_SERVER_PORT } else { "3004" }
 $WebPort = if ($env:FRONTEND_PORT) { $env:FRONTEND_PORT } else { "3003" }
 $RedisPort = if ($env:REDIS_PORT) { $env:REDIS_PORT } else { "6379" }
+$LocalRedisUrls = @("redis://localhost:$RedisPort", "redis://127.0.0.1:$RedisPort")
 
 # -- Kill existing port processes ----------------------------
 function Stop-PortProcess {
@@ -101,8 +102,12 @@ $redisServerPath = $null
 $redisSource = $null
 $redisLogFile = Join-Path $redisLayout.Logs "redis-$RedisPort.log"
 $redisPidFile = Join-Path $redisLayout.Data "redis-$RedisPort.pid"
+$configuredRedisUrl = if ($env:REDIS_URL) { $env:REDIS_URL.Trim() } else { "" }
+$useExternalRedis = $useRedis -and $configuredRedisUrl -and ($LocalRedisUrls -notcontains $configuredRedisUrl)
 
-if ($useRedis) {
+if ($useExternalRedis) {
+    Write-Ok "Using external Redis: $configuredRedisUrl"
+} elseif ($useRedis) {
     $redisCommands = Resolve-PortableRedisBinaries -ProjectRoot $ProjectRoot
     if (-not $redisCommands) {
         $redisCommands = Resolve-GlobalRedisBinaries
@@ -170,18 +175,21 @@ if (-not $Quick) {
     Write-Host "  Building shared..."
     Push-Location (Join-Path $ProjectRoot "packages/shared")
     & $pnpmCommand run build
+    if ($LASTEXITCODE -ne 0) { Pop-Location; Write-Err "Build failed: shared"; exit 1 }
     Pop-Location
     Write-Ok "shared"
 
     Write-Host "  Building mcp-server..."
     Push-Location (Join-Path $ProjectRoot "packages/mcp-server")
     & $pnpmCommand run build
+    if ($LASTEXITCODE -ne 0) { Pop-Location; Write-Err "Build failed: mcp-server"; exit 1 }
     Pop-Location
     Write-Ok "mcp-server"
 
     Write-Host "  Building api..."
     Push-Location (Join-Path $ProjectRoot "packages/api")
     & $pnpmCommand run build
+    if ($LASTEXITCODE -ne 0) { Pop-Location; Write-Err "Build failed: api"; exit 1 }
     Pop-Location
     Write-Ok "api"
 
@@ -189,6 +197,7 @@ if (-not $Quick) {
         Write-Host "  Building web (production)..."
         Push-Location (Join-Path $ProjectRoot "packages/web")
         & $pnpmCommand run build
+        if ($LASTEXITCODE -ne 0) { Pop-Location; Write-Err "Build failed: web"; exit 1 }
         Pop-Location
         Write-Ok "web (production)"
     }
@@ -203,18 +212,35 @@ if (Test-Path $mcpPath) {
     Write-Ok "MCP server path: $mcpPath"
 }
 
+$apiEntry = Join-Path $ProjectRoot "packages/api/dist/index.js"
+if (-not (Test-Path $apiEntry)) {
+    Write-Err "API build artifact not found - run without -Quick first to build"
+    exit 1
+}
+
+$nextDir = Join-Path $ProjectRoot "packages/web/.next"
+if (-not $Dev -and -not (Test-Path $nextDir)) {
+    Write-Err ".next directory not found - run without -Quick first to build"
+    exit 1
+}
+
 # -- Start services ------------------------------------------
 Write-Step "Start services"
 
 # Track background jobs for cleanup
 $jobs = @()
+$runtimeEnvOverrides = @{
+    REDIS_URL = $env:REDIS_URL
+    MEMORY_STORE = $env:MEMORY_STORE
+    CAT_CAFE_MCP_SERVER_PATH = $env:CAT_CAFE_MCP_SERVER_PATH
+}
 
 # API Server
 # Env vars are loaded into this process (line 42-53) and inherited by Start-Job.
 # No --env-file needed - avoids depending on Node's --env-file support here.
 Write-Host "  Starting API Server (port $ApiPort)..."
-$apiJob = Start-Job -ScriptBlock {
-    param($root, $envFile)
+$apiJob = Start-Job -Name "api" -ScriptBlock {
+    param($root, $envFile, $runtimeEnvOverrides)
     Set-Location (Join-Path $root "packages/api")
     # Load .env into job process (Start-Job inherits parent env,
     # but re-load to be safe if process env was not fully propagated)
@@ -231,8 +257,15 @@ $apiJob = Start-Job -ScriptBlock {
             }
         }
     }
+    foreach ($entry in $runtimeEnvOverrides.GetEnumerator()) {
+        if ($null -eq $entry.Value -or $entry.Value -eq "") {
+            [System.Environment]::SetEnvironmentVariable($entry.Key, $null, "Process")
+        } else {
+            [System.Environment]::SetEnvironmentVariable($entry.Key, [string]$entry.Value, "Process")
+        }
+    }
     & node dist/index.js 2>&1
-} -ArgumentList $ProjectRoot, $envFile
+} -ArgumentList $ProjectRoot, $envFile, $runtimeEnvOverrides
 $jobs += $apiJob
 
 Start-Sleep -Seconds 2
@@ -241,7 +274,7 @@ Start-Sleep -Seconds 2
 if ($Dev) {
     # Development mode: next dev (hot reload)
     Write-Host "  Starting Frontend (port $WebPort, dev)..."
-    $webJob = Start-Job -ScriptBlock {
+    $webJob = Start-Job -Name "web" -ScriptBlock {
         param($root, $port, $pnpmPath)
         Set-Location (Join-Path $root "packages/web")
         $env:PORT = $port
@@ -250,13 +283,8 @@ if ($Dev) {
     } -ArgumentList $ProjectRoot, $WebPort, $pnpmCommand
 } else {
     # Production mode: next start (default - avoids #105 issues)
-    $nextDir = Join-Path $ProjectRoot "packages/web/.next"
-    if (-not (Test-Path $nextDir)) {
-        Write-Err ".next directory not found - run without -Quick first to build"
-        exit 1
-    }
     Write-Host "  Starting Frontend (port $WebPort, production)..."
-    $webJob = Start-Job -ScriptBlock {
+    $webJob = Start-Job -Name "web" -ScriptBlock {
         param($root, $port, $pnpmPath)
         Set-Location (Join-Path $root "packages/web")
         $env:PORT = $port
@@ -268,7 +296,8 @@ $jobs += $webJob
 Start-Sleep -Seconds 3
 
 # -- Status --------------------------------------------------
-$storageMode = if ($useRedis) { "Redis (redis://localhost:$RedisPort)" } else { "Memory (restart loses data)" }
+$effectiveRedisUrl = if ($env:REDIS_URL) { $env:REDIS_URL } else { "" }
+$storageMode = if ($useRedis -and $effectiveRedisUrl) { "Redis ($effectiveRedisUrl)" } elseif ($useRedis) { "Redis (redis://localhost:$RedisPort)" } else { "Memory (restart loses data)" }
 $frontendMode = if ($Dev) { "development (hot reload)" } else { "production (PWA enabled)" }
 
 Write-Host ""
@@ -287,13 +316,6 @@ Write-Host ""
 # -- Wait and cleanup ----------------------------------------
 try {
     while ($true) {
-        # Check if jobs are still running
-        $running = $jobs | Where-Object { $_.State -eq "Running" }
-        if ($running.Count -eq 0) {
-            Write-Warn "All services stopped"
-            break
-        }
-
         # Print any job output
         foreach ($job in $jobs) {
             $output = Receive-Job -Job $job -ErrorAction SilentlyContinue
@@ -302,6 +324,14 @@ try {
                     Write-Host $line
                 }
             }
+        }
+
+        $stoppedJobs = $jobs | Where-Object { $_.State -ne "Running" }
+        if ($stoppedJobs.Count -gt 0) {
+            foreach ($job in $stoppedJobs) {
+                Write-Warn "Service job '$($job.Name)' stopped ($($job.State))"
+            }
+            break
         }
 
         Start-Sleep -Seconds 2

@@ -37,6 +37,14 @@ export interface NativeDirectoryPickerCommand {
   args: string[];
 }
 
+export function normalizePickedDirectoryPath(rawPath: string): string {
+  const trimmed = rawPath.trim();
+  if (/^[A-Za-z]:[\\/]?$/.test(trimmed)) {
+    return `${trimmed[0]}:\\`;
+  }
+  return trimmed.replace(/[\\/]$/, '');
+}
+
 export function getPickDirectoryCommand(platformName = process.platform): NativeDirectoryPickerCommand | null {
   switch (platformName) {
     case 'darwin':
@@ -66,7 +74,7 @@ export async function execPickDirectory(): Promise<PickDirectoryResult> {
 
   try {
     const { stdout } = await execFileAsync(picker.command, picker.args, { timeout: 120_000 });
-    const picked = stdout.trim().replace(/[\\/]$/, '');
+    const picked = normalizePickedDirectoryPath(stdout);
     if (!picked) return { status: 'cancelled' };
     const s = await stat(picked);
     if (!s.isDirectory()) return { status: 'error', message: 'Selected path is not a directory' };
