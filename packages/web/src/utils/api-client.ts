@@ -14,7 +14,7 @@ function resolveApiUrl(): string {
     return 'https://api.clowder-ai.com';
   }
   if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
-  if (typeof window === 'undefined') return 'http://localhost:3003';
+  if (typeof window === 'undefined') return 'http://localhost:3004';
   // Derive API port from frontend port: convention is frontend + 1 = API
   // (runtime: 3001→3002, alpha: 3011→3012). Fallback to +1 of current port.
   const frontendPort = Number(window.location.port) || 3001;
