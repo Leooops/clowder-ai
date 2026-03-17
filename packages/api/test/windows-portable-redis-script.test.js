@@ -208,8 +208,10 @@ test('Windows CLI installs use the explicit npm command path and Redis mode only
 test('Windows installer exits immediately when native installs are cancelled by the user', () => {
   assert.match(installScript, /function Test-InstallerCancellation/);
   assert.match(installScript, /function Exit-InstallerIfCancelled/);
-  assert.match(installScript, /PipelineStoppedException/);
-  assert.match(installScript, /OperationStoppedException/);
+  assert.match(installScript, /\$exceptionType = \$exception\.GetType\(\)\.FullName/);
+  assert.match(installScript, /\$exceptionType -eq 'System\.Management\.Automation\.PipelineStoppedException'/);
+  assert.match(installScript, /\$exceptionType -eq 'System\.Management\.Automation\.OperationStoppedException'/);
+  assert.doesNotMatch(installScript, /-is \[System\.Management\.Automation\.OperationStoppedException\]/);
   assert.match(installScript, /if \(Test-InstallerCancellation -ErrorRecord \$ErrorRecord\) \{/);
   assert.match(installScript, /Write-Err "\$Context cancelled by user"/);
   assert.match(installScript, /Exit-InstallerIfCancelled -ErrorRecord \$_ -Context "pnpm installation"/);

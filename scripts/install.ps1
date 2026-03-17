@@ -41,8 +41,9 @@ function Test-InstallerCancellation {
     }
     $exception = $ErrorRecord.Exception
     while ($exception) {
-        if ($exception -is [System.Management.Automation.PipelineStoppedException] -or
-            $exception -is [System.Management.Automation.OperationStoppedException]) {
+        $exceptionType = $exception.GetType().FullName
+        if ($exceptionType -eq 'System.Management.Automation.PipelineStoppedException' -or
+            $exceptionType -eq 'System.Management.Automation.OperationStoppedException') {
             return $true
         }
         $exception = $exception.InnerException
