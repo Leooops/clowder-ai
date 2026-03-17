@@ -167,66 +167,11 @@ if [ "$AUTH_MODE_CHOICE" = "2" ]; then
         read -p "  API Base URL [https://api.anthropic.com]: " SETUP_BASE_URL
         SETUP_BASE_URL=${SETUP_BASE_URL:-https://api.anthropic.com}
 
-        # Use Node for safe JSON serialization and merge with existing profiles.
-        # This avoids shell quoting issues and preserves existing profiles.
+        # Create profile via F062-aligned helper script.
+        # Uses the same data structures and merge logic as provider-profiles.ts.
         # API key is passed via stdin (not argv) to avoid /proc exposure.
-        mkdir -p "$CAT_CAFE_DIR"
-        echo "$SETUP_API_KEY" | node -e "
-const fs = require('fs');
-const baseUrl = process.argv[1].replace(/\/+\$/, '');
-const metaPath = process.argv[2];
-const secretsPath = process.argv[3];
-
-// Read API key from stdin (avoids argv exposure in process list)
-const apiKey = fs.readFileSync('/dev/stdin', 'utf-8').trim();
-
-const profileId = 'profile-setup-' + Date.now();
-const now = new Date().toISOString();
-
-// Read existing or create default
-let meta;
-try { meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8')); } catch { meta = null; }
-if (!meta || meta.version !== 1 || !meta.providers?.anthropic?.profiles) {
-  meta = {
-    version: 1,
-    providers: {
-      anthropic: {
-        activeProfileId: 'anthropic-subscription-default',
-        profiles: [{
-          id: 'anthropic-subscription-default',
-          provider: 'anthropic',
-          name: '自有订阅',
-          mode: 'subscription',
-          createdAt: now,
-          updatedAt: now,
-        }],
-      },
-    },
-  };
-}
-
-let secrets;
-try { secrets = JSON.parse(fs.readFileSync(secretsPath, 'utf-8')); } catch { secrets = null; }
-if (!secrets || secrets.version !== 1 || !secrets.providers?.anthropic) {
-  secrets = { version: 1, providers: { anthropic: {} } };
-}
-
-// Add new profile (merge, don't overwrite)
-meta.providers.anthropic.profiles.push({
-  id: profileId,
-  provider: 'anthropic',
-  name: 'API Key (setup.sh)',
-  mode: 'api_key',
-  baseUrl: baseUrl,
-  createdAt: now,
-  updatedAt: now,
-});
-meta.providers.anthropic.activeProfileId = profileId;
-secrets.providers.anthropic[profileId] = { apiKey: apiKey };
-
-fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2) + '\n', 'utf-8');
-fs.writeFileSync(secretsPath, JSON.stringify(secrets, null, 2) + '\n', { encoding: 'utf-8', mode: 0o600 });
-" "$SETUP_BASE_URL" "$PROFILE_META" "$PROFILE_SECRETS"
+        echo "$SETUP_API_KEY" | node "$SCRIPT_DIR/setup-auth-profile.mjs" \
+            "$SETUP_BASE_URL" "$PROFILE_META" "$PROFILE_SECRETS"
 
         if [ $? -eq 0 ]; then
             chmod 600 "$PROFILE_SECRETS"
