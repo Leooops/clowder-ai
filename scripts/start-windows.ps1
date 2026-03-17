@@ -1,7 +1,6 @@
 <#
 .SYNOPSIS
-  Clowder AI (Cat Cafe) — Windows Startup Script
-  猫猫咖啡 Windows 启动脚本
+  Clowder AI (Cat Cafe) - Windows Startup Script
 
 .DESCRIPTION
   Starts API server and Frontend (Next.js) with .env loading.
@@ -23,13 +22,13 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# ── Helpers ─────────────────────────────────────────────────
+# -- Helpers -------------------------------------------------
 function Write-Step  { param([string]$msg) Write-Host "`n==> $msg" -ForegroundColor Cyan }
 function Write-Ok    { param([string]$msg) Write-Host "  [OK] $msg" -ForegroundColor Green }
 function Write-Warn  { param([string]$msg) Write-Host "  [!!] $msg" -ForegroundColor Yellow }
 function Write-Err   { param([string]$msg) Write-Host "  [ERR] $msg" -ForegroundColor Red }
 
-# ── Resolve project root ────────────────────────────────────
+# -- Resolve project root ------------------------------------
 $ScriptPath = if ($PSCommandPath) { $PSCommandPath } elseif ($MyInvocation.MyCommand.Path) { $MyInvocation.MyCommand.Path } else { $null }
 if (-not $ScriptPath) {
     Write-Err "Could not resolve start-windows.ps1 path. Run with: powershell -ExecutionPolicy Bypass -File .\scripts\start-windows.ps1"
@@ -43,7 +42,7 @@ Set-Location $ProjectRoot
 Write-Host "Cat Cafe - Windows Startup" -ForegroundColor Cyan
 Write-Host "=========================="
 
-# ── Load .env ───────────────────────────────────────────────
+# -- Load .env -----------------------------------------------
 $envFile = Join-Path $ProjectRoot ".env"
 if (Test-Path $envFile) {
     Get-Content $envFile | ForEach-Object {
@@ -59,7 +58,7 @@ if (Test-Path $envFile) {
     }
     Write-Ok ".env loaded"
 } else {
-    Write-Warn ".env not found — using defaults"
+    Write-Warn ".env not found - using defaults"
 }
 
 $pnpmCommand = Resolve-ToolCommand -Name "pnpm"
@@ -69,18 +68,18 @@ if (-not $pnpmCommand) {
 }
 Write-Ok "pnpm: $pnpmCommand"
 
-# ── Ports ───────────────────────────────────────────────────
+# -- Ports ---------------------------------------------------
 $ApiPort = if ($env:API_SERVER_PORT) { $env:API_SERVER_PORT } else { "3004" }
 $WebPort = if ($env:FRONTEND_PORT) { $env:FRONTEND_PORT } else { "3003" }
 $RedisPort = if ($env:REDIS_PORT) { $env:REDIS_PORT } else { "6379" }
 
-# ── Kill existing port processes ────────────────────────────
+# -- Kill existing port processes ----------------------------
 function Stop-PortProcess {
     param([int]$Port, [string]$Name)
     $connections = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
     if ($connections) {
         foreach ($conn in $connections) {
-            Write-Warn "Port $Port ($Name) in use by PID $($conn.OwningProcess) — stopping"
+            Write-Warn "Port $Port ($Name) in use by PID $($conn.OwningProcess) - stopping"
             Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue
         }
         Start-Sleep -Seconds 1
@@ -91,7 +90,7 @@ Write-Step "Check ports"
 Stop-PortProcess -Port ([int]$ApiPort) -Name "API"
 Stop-PortProcess -Port ([int]$WebPort) -Name "Frontend"
 
-# ── Storage (Redis or Memory) ──────────────────────────────
+# -- Storage (Redis or Memory) -------------------------------
 Write-Step "Storage"
 
 $useRedis = -not $Memory
@@ -143,28 +142,28 @@ if ($useRedis) {
                     $env:REDIS_URL = "redis://localhost:$RedisPort"
                     $startedRedis = $true
                 } else {
-                    Write-Warn "Redis start failed — falling back to memory storage"
+                    Write-Warn "Redis start failed - falling back to memory storage"
                     $useRedis = $false
                 }
             } else {
-                Write-Warn "Redis not installed — using memory storage"
+                Write-Warn "Redis not installed - using memory storage"
                 Write-Warn "Run .\\scripts\\install.ps1 again to fetch the project-local Redis bundle into .cat-cafe/redis/windows."
                 $useRedis = $false
             }
         } catch {
-            Write-Warn "Redis start failed — using memory storage"
+            Write-Warn "Redis start failed - using memory storage"
             $useRedis = $false
         }
     }
 }
 
 if (-not $useRedis) {
-    Write-Warn "Memory mode — data will be lost on restart"
+    Write-Warn "Memory mode - data will be lost on restart"
     Remove-Item Env:REDIS_URL -ErrorAction SilentlyContinue
     $env:MEMORY_STORE = "1"
 }
 
-# ── Build (unless -Quick) ──────────────────────────────────
+# -- Build (unless -Quick) ----------------------------------
 if (-not $Quick) {
     Write-Step "Build packages"
 
@@ -197,14 +196,14 @@ if (-not $Quick) {
     Write-Step "Skip build (-Quick)"
 }
 
-# ── Configure MCP server path ──────────────────────────────
+# -- Configure MCP server path -------------------------------
 $mcpPath = Join-Path $ProjectRoot "packages/mcp-server/dist/index.js"
 if (Test-Path $mcpPath) {
     $env:CAT_CAFE_MCP_SERVER_PATH = $mcpPath
     Write-Ok "MCP server path: $mcpPath"
 }
 
-# ── Start services ──────────────────────────────────────────
+# -- Start services ------------------------------------------
 Write-Step "Start services"
 
 # Track background jobs for cleanup
@@ -212,7 +211,7 @@ $jobs = @()
 
 # API Server
 # Env vars are loaded into this process (line 42-53) and inherited by Start-Job.
-# No --env-file needed — avoids depending on Node's --env-file support here.
+# No --env-file needed - avoids depending on Node's --env-file support here.
 Write-Host "  Starting API Server (port $ApiPort)..."
 $apiJob = Start-Job -ScriptBlock {
     param($root, $envFile)
@@ -250,10 +249,10 @@ if ($Dev) {
         & $pnpmPath exec next dev -p $port 2>&1
     } -ArgumentList $ProjectRoot, $WebPort, $pnpmCommand
 } else {
-    # Production mode: next start (default — avoids #105 issues)
+    # Production mode: next start (default - avoids #105 issues)
     $nextDir = Join-Path $ProjectRoot "packages/web/.next"
     if (-not (Test-Path $nextDir)) {
-        Write-Err ".next directory not found — run without -Quick first to build"
+        Write-Err ".next directory not found - run without -Quick first to build"
         exit 1
     }
     Write-Host "  Starting Frontend (port $WebPort, production)..."
@@ -268,7 +267,7 @@ $jobs += $webJob
 
 Start-Sleep -Seconds 3
 
-# ── Status ──────────────────────────────────────────────────
+# -- Status --------------------------------------------------
 $storageMode = if ($useRedis) { "Redis (redis://localhost:$RedisPort)" } else { "Memory (restart loses data)" }
 $frontendMode = if ($Dev) { "development (hot reload)" } else { "production (PWA enabled)" }
 
@@ -285,7 +284,7 @@ Write-Host ""
 Write-Host "  Press Ctrl+C to stop all services" -ForegroundColor Yellow
 Write-Host ""
 
-# ── Wait and cleanup ────────────────────────────────────────
+# -- Wait and cleanup ----------------------------------------
 try {
     while ($true) {
         # Check if jobs are still running

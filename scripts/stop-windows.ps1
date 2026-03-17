@@ -1,7 +1,6 @@
 <#
 .SYNOPSIS
-  Clowder AI (Cat Cafe) — Windows Stop Script
-  猫猫咖啡 Windows 停止脚本
+  Clowder AI (Cat Cafe) - Windows Stop Script
 
 .DESCRIPTION
   Stops Cat Cafe services (API, Frontend, Redis) by port.
@@ -15,7 +14,7 @@ $ErrorActionPreference = "Continue"
 function Write-Ok   { param([string]$msg) Write-Host "  [OK] $msg" -ForegroundColor Green }
 function Write-Warn { param([string]$msg) Write-Host "  [!!] $msg" -ForegroundColor Yellow }
 
-Write-Host "Cat Cafe — Stopping services" -ForegroundColor Cyan
+Write-Host "Cat Cafe - Stopping services" -ForegroundColor Cyan
 Write-Host "============================="
 
 # Load .env for port config
@@ -51,7 +50,7 @@ function Stop-PortProcess {
         }
         Write-Ok "Stopped $Name (port $Port)"
     } else {
-        Write-Warn "$Name (port $Port) — not running"
+        Write-Warn "$Name (port $Port) - not running"
     }
 }
 
@@ -65,10 +64,10 @@ try {
         & redis-cli -p $RedisPort shutdown save 2>$null
         Write-Ok "Redis stopped (port $RedisPort)"
     } else {
-        Write-Warn "Redis (port $RedisPort) — not running"
+        Write-Warn "Redis (port $RedisPort) - not running"
     }
 } catch {
-    Write-Warn "Redis (port $RedisPort) — not running"
+    Write-Warn "Redis (port $RedisPort) - not running"
 }
 
 Write-Host "`nAll services stopped." -ForegroundColor Green

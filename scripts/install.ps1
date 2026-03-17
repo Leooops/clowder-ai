@@ -1,13 +1,12 @@
 <#
 .SYNOPSIS
-  Clowder AI — Windows Repo-Local Install Helper
-  猫猫咖啡 Windows 仓库内安装助手
+  Clowder AI - Windows Repo-Local Install Helper
 
 .DESCRIPTION
   Installs prerequisites and sets up the current checked-out clowder-ai repo.
   Clone or download the repo first, then run this helper from inside it.
-  Steps: env detect → Node/pnpm install → Redis → repo-local build → skills mount
-         → AI CLI tools → auth config → .env → verify & optionally start
+  Steps: env detect -> Node/pnpm install -> Redis -> repo-local build -> skills mount
+         -> AI CLI tools -> auth config -> .env -> verify & optionally start
 
 .EXAMPLE
   # From repo root:
@@ -35,6 +34,28 @@ function Refresh-Path {
 
 function Resolve-PnpmCommand { Resolve-ToolCommand -Name "pnpm" }
 function Invoke-Pnpm { param([string[]]$CommandArgs) Invoke-ToolCommand -Name "pnpm" -CommandArgs $CommandArgs }
+function Test-InstallerCancellation {
+    param($ErrorRecord)
+    if (-not $ErrorRecord -or -not $ErrorRecord.Exception) {
+        return $false
+    }
+    $exception = $ErrorRecord.Exception
+    while ($exception) {
+        if ($exception -is [System.Management.Automation.PipelineStoppedException] -or
+            $exception -is [System.Management.Automation.OperationStoppedException]) {
+            return $true
+        }
+        $exception = $exception.InnerException
+    }
+    return $false
+}
+function Exit-InstallerIfCancelled {
+    param($ErrorRecord, [string]$Context)
+    if (Test-InstallerCancellation -ErrorRecord $ErrorRecord) {
+        Write-Err "$Context cancelled by user"
+        exit 1
+    }
+}
 function Get-PnpmStatus {
     param([int]$Attempts = 1, [int]$DelayMs = 500)
     for ($attempt = 0; $attempt -lt $Attempts; $attempt++) {
@@ -79,12 +100,12 @@ function Resolve-ProjectRoot {
         $gitRepoUnavailable = $LASTEXITCODE -ne 0
     } catch {}
     if ($gitRepoUnavailable) {
-        Write-Warn "No .git directory detected — git-dependent features will be unavailable"
+        Write-Warn "No .git directory detected - git-dependent features will be unavailable"
     }
     return $projectRoot
 }
 
-# ── Step 1: Environment detection ──────────────────────────
+# -- Step 1: Environment detection ---------------------------
 Write-Step "Step 1/9 - Detect environment"
 
 if ($PSVersionTable.PSVersion.Major -lt 5) {
@@ -94,7 +115,7 @@ if ($PSVersionTable.PSVersion.Major -lt 5) {
 Write-Ok "PowerShell $($PSVersionTable.PSVersion)"
 
 $hasWinget = $null -ne (Get-Command winget -ErrorAction SilentlyContinue)
-if ($hasWinget) { Write-Ok "winget available" } else { Write-Warn "winget not found — manual install may be needed" }
+if ($hasWinget) { Write-Ok "winget available" } else { Write-Warn "winget not found - manual install may be needed" }
 
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     Write-Err "Git not found. Install from https://git-scm.com/ and re-run."
@@ -132,9 +153,11 @@ if (-not $nodeOk) {
                 Write-Ok "Node.js $nodeRaw installed"
                 $nodeOk = $true
             }
-        } catch {}
+        } catch {
+            Exit-InstallerIfCancelled -ErrorRecord $_ -Context "Node.js installation"
+        }
         if (-not $nodeOk) {
-            Write-Warn "winget Node.js install failed — falling back to manual prerequisite check"
+            Write-Warn "winget Node.js install failed - falling back to manual prerequisite check"
         }
     }
     if (-not $nodeOk) {
@@ -166,7 +189,9 @@ if (-not $pnpmOk) {
             } else {
                 throw "pnpm shim missing after corepack install"
             }
-        } catch {}
+        } catch {
+            Exit-InstallerIfCancelled -ErrorRecord $_ -Context "pnpm installation"
+        }
     }
     if (-not $pnpmOk) {
         $npmCommand = Resolve-ToolCommand -Name "npm"
@@ -182,7 +207,9 @@ if (-not $pnpmOk) {
             } else {
                 throw "pnpm shim missing after npm install"
             }
-        } catch {}
+        } catch {
+            Exit-InstallerIfCancelled -ErrorRecord $_ -Context "pnpm installation"
+        }
     }
     if (-not $pnpmOk) {
         Write-ToolResolutionDiagnostics -Name "pnpm"
@@ -194,7 +221,7 @@ if (-not $pnpmOk) {
 Write-Step "Step 3/9 - Redis"
 
 if ($Memory) {
-    Write-Warn "Windows installer no longer offers memory mode — continuing with Redis setup"
+    Write-Warn "Windows installer no longer offers memory mode - continuing with Redis setup"
 }
 $redisPlan = Resolve-InstallerRedisPlan
 $hasRedis = Apply-InstallerRedisPlan -State $authState -ProjectRoot $ProjectRoot -Plan $redisPlan
@@ -210,11 +237,15 @@ Write-Ok "Using project root: $ProjectRoot"
 
 Write-Host "  Running pnpm install..."
 $frozenInstallOk = $false
+$frozenInstallError = $null
 try {
     Invoke-Pnpm -CommandArgs @("install", "--frozen-lockfile") 2>$null
     $frozenInstallOk = $LASTEXITCODE -eq 0
-} catch {}
+} catch {
+    $frozenInstallError = $_
+}
 if (-not $frozenInstallOk) {
+    Exit-InstallerIfCancelled -ErrorRecord $frozenInstallError -Context "pnpm install"
     Write-Warn "Frozen lockfile failed, retrying..."
     Invoke-Pnpm -CommandArgs @("install")
     if ($LASTEXITCODE -ne 0) { Write-Err "pnpm install failed"; exit 1 }
@@ -275,6 +306,7 @@ if (-not $SkipCli) {
                     Write-Warn "$($tool.Name) CLI install completed but command was not visible yet"
                 }
             } catch {
+                Exit-InstallerIfCancelled -ErrorRecord $_ -Context "$($tool.Name) CLI install"
                 Write-Warn "Could not install $($tool.Name) CLI: npm install -g $($tool.Pkg)"
             }
         }
@@ -292,13 +324,13 @@ $envFile = Join-Path $ProjectRoot ".env"
 $envExample = Join-Path $ProjectRoot ".env.example"
 
 if (Test-Path $envFile) {
-    Write-Ok ".env already exists — skipping"
+    Write-Ok ".env already exists - skipping"
 } elseif (Test-Path $envExample) {
     Copy-Item $envExample $envFile
     Write-Ok ".env created from .env.example"
     Write-Warn "Edit .env to add your API keys and customize ports"
 } else {
-    Write-Warn ".env.example not found — creating minimal .env"
+    Write-Warn ".env.example not found - creating minimal .env"
     @"
 FRONTEND_PORT=3003
 API_SERVER_PORT=3004

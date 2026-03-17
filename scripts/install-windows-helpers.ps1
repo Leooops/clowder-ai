@@ -7,7 +7,7 @@ function Mount-InstallerSkills {
     $skillsSource = Join-Path $ProjectRoot "cat-cafe-skills"
     $cliDirs = @("$env:USERPROFILE\.claude", "$env:USERPROFILE\.codex", "$env:USERPROFILE\.gemini")
     if (-not (Test-Path $skillsSource)) {
-        Write-Warn "cat-cafe-skills/ not found — skills mount skipped"
+        Write-Warn "cat-cafe-skills/ not found - skills mount skipped"
         return
     }
 
@@ -94,7 +94,7 @@ function Resolve-GlobalRedisBinaries {
 function Ensure-WindowsRedis {
     param([string]$ProjectRoot, [switch]$Memory)
     if ($Memory) {
-        Write-Warn "Memory mode (-Memory) — skipping Redis detection"
+        Write-Warn "Memory mode (-Memory) - skipping Redis detection"
         return $false
     }
 
@@ -110,7 +110,7 @@ function Ensure-WindowsRedis {
         return $true
     }
 
-    Write-Warn "Redis not found — attempting portable install into .cat-cafe/redis/windows"
+    Write-Warn "Redis not found - attempting portable install into .cat-cafe/redis/windows"
     try {
         $layout = Resolve-PortableRedisLayout -ProjectRoot $ProjectRoot
         $headers = @{ "User-Agent" = "ClowderAI-Installer" }
@@ -151,7 +151,7 @@ function Ensure-WindowsRedis {
         Write-Warn "Portable Redis will be reused from .cat-cafe/redis/windows on later starts."
         return $true
     } catch {
-        Write-Warn "Redis auto-install failed — install Redis manually or rerun with an external Redis URL"
+        Write-Warn "Redis auto-install failed - install Redis manually or rerun with an external Redis URL"
         Write-Warn "Manual Redis install: https://github.com/redis-windows/redis-windows/releases"
         return $false
     }
@@ -247,7 +247,7 @@ function Configure-InstallerAuth {
     $isInteractive = [Environment]::UserInteractive -and -not $env:CI
 
     if (-not $isInteractive) {
-        Write-Warn "Non-interactive mode — skipping auth prompts. Run claude / codex / gemini manually after install."
+        Write-Warn "Non-interactive mode - skipping auth prompts. Run claude / codex / gemini manually after install."
         return
     }
 
@@ -268,7 +268,7 @@ function Configure-InstallerAuth {
                 Write-Ok "Claude API key profile written to .cat-cafe/"
             } else {
                 Remove-ClaudeInstallerProfile $State
-                Write-Warn "Claude API key empty — keeping OAuth"
+                Write-Warn "Claude API key empty - keeping OAuth"
             }
         } elseif ($choice -eq "oauth") {
             Remove-ClaudeInstallerProfile $State
@@ -295,7 +295,7 @@ function Configure-InstallerAuth {
                 Write-Ok "Codex API key collected for .env"
             } else {
                 Set-CodexOAuthMode $State
-                Write-Warn "Codex API key empty — keeping OAuth"
+                Write-Warn "Codex API key empty - keeping OAuth"
             }
         } elseif ($choice -eq "oauth") {
             Set-CodexOAuthMode $State
@@ -321,7 +321,7 @@ function Configure-InstallerAuth {
                 Write-Ok "Gemini API key collected for .env"
             } else {
                 Set-GeminiOAuthMode $State
-                Write-Warn "Gemini API key empty — keeping OAuth"
+                Write-Warn "Gemini API key empty - keeping OAuth"
             }
         } elseif ($choice -eq "oauth") {
             Set-GeminiOAuthMode $State

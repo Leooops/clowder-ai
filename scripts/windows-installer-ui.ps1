@@ -36,7 +36,7 @@ function Write-InstallerChoiceScreen {
         $prefix = if ($i -eq $ActiveIndex) { "> " } else { "  " }
         $marker = ""
         if ($SelectedMap) {
-            $marker = if ($SelectedMap.ContainsKey($i)) { "◉ " } else { "◯ " }
+            $marker = if ($SelectedMap.ContainsKey($i)) { "[x] " } else { "[ ] " }
         }
         $line = "$prefix$marker$(Get-InstallerOptionText $Options[$i])"
         $color = if ($i -eq $ActiveIndex) { "Cyan" } else { "White" }
@@ -60,7 +60,7 @@ function Select-InstallerChoice {
 
     try {
         while ($true) {
-            Write-InstallerChoiceScreen -Title $Title -Prompt $Prompt -Instructions "Use ↑↓ arrows to move, Enter to select" -Options $Options -ActiveIndex $index
+            Write-InstallerChoiceScreen -Title $Title -Prompt $Prompt -Instructions "Use Up/Down arrows to move, Enter to select" -Options $Options -ActiveIndex $index
             $key = [Console]::ReadKey($true)
             switch ($key.Key) {
                 "UpArrow" { $index = if ($index -le 0) { $Options.Count - 1 } else { $index - 1 } }
@@ -94,7 +94,7 @@ function Select-InstallerMultiChoice {
 
     try {
         while ($true) {
-            Write-InstallerChoiceScreen -Title $Title -Prompt $Prompt -Instructions "Use ↑↓ to move, Space to toggle, Enter to confirm" -Options $Options -ActiveIndex $index -SelectedMap $selectedMap
+            Write-InstallerChoiceScreen -Title $Title -Prompt $Prompt -Instructions "Use Up/Down to move, Space to toggle, Enter to confirm" -Options $Options -ActiveIndex $index -SelectedMap $selectedMap
             $key = [Console]::ReadKey($true)
             switch ($key.Key) {
                 "UpArrow" { $index = if ($index -le 0) { $Options.Count - 1 } else { $index - 1 } }
@@ -123,14 +123,14 @@ function Select-InstallerMultiChoice {
 function Resolve-InstallerRedisPlan {
     $mode = if (Test-InstallerConsoleUi) {
         Select-InstallerChoice -Title "Redis setup" -Prompt "Choose how this workspace should store runtime data" -Options @(
-            @{ Label = "&Install Redis locally (recommended / 推荐)"; Help = "Download or reuse the project-local portable Redis bundle"; Value = "portable" },
-            @{ Label = "&Use external Redis URL / 使用外部 Redis"; Help = "Use an existing external Redis instance"; Value = "external" }
+            @{ Label = "&Install Redis locally (recommended)"; Help = "Download or reuse the project-local portable Redis bundle"; Value = "portable" },
+            @{ Label = "&Use external Redis URL"; Help = "Use an existing external Redis instance"; Value = "external" }
         )
     } else { "portable" }
 
     $redisUrl = if ($mode -eq "external") { Read-Host "  External Redis URL" } else { "" }
     if ($mode -eq "external" -and -not $redisUrl) {
-        Write-Warn "External Redis URL empty — using local Redis setup"
+        Write-Warn "External Redis URL empty - using local Redis setup"
         $mode = "portable"
     }
     return [pscustomobject]@{ Mode = $mode; RedisUrl = $redisUrl }

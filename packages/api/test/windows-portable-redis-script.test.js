@@ -17,6 +17,8 @@ const uiHelpersScript = existsSync(uiHelpersPath)
   : '';
 const helpersScript = readFileSync(join(repoRoot, 'scripts', 'install-windows-helpers.ps1'), 'utf8');
 const startWindowsScript = readFileSync(join(repoRoot, 'scripts', 'start-windows.ps1'), 'utf8');
+const stopWindowsPath = join(repoRoot, 'scripts', 'stop-windows.ps1');
+const stopWindowsScript = existsSync(stopWindowsPath) ? readFileSync(stopWindowsPath, 'utf8') : '';
 const startBatPath = join(repoRoot, 'scripts', 'start.bat');
 const startBatScript = existsSync(startBatPath) ? readFileSync(startBatPath, 'utf8') : '';
 
@@ -43,33 +45,45 @@ test('Windows installer treats non-git directories as a warning instead of a Pow
 test('Windows installer treats winget Node install failures as retryable instead of terminating native command errors', () => {
   const wingetInstallIndex = installScript.indexOf('winget install OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements --silent 2>$null');
   const tryIndex = installScript.lastIndexOf('try {', wingetInstallIndex);
-  const catchIndex = installScript.indexOf('} catch {}', wingetInstallIndex);
+  const catchIndex = installScript.indexOf('} catch {', wingetInstallIndex);
+  const cancelExitIndex = installScript.indexOf('Exit-InstallerIfCancelled -ErrorRecord $_ -Context "Node.js installation"', catchIndex);
+  const fallbackWarnIndex = installScript.indexOf('Write-Warn "winget Node.js install failed - falling back to manual prerequisite check"');
   const manualInstallIndex = installScript.indexOf('Write-Err "Node.js >= 20 required. Install from https://nodejs.org/"');
 
   assert.notEqual(wingetInstallIndex, -1, 'expected winget-based Node install path');
   assert.notEqual(tryIndex, -1, 'expected winget install to be wrapped in try/catch');
-  assert.notEqual(catchIndex, -1, 'expected winget install to swallow native command errors');
+  assert.notEqual(catchIndex, -1, 'expected winget install catch block');
+  assert.notEqual(cancelExitIndex, -1, 'expected winget path to abort on user cancellation');
+  assert.notEqual(fallbackWarnIndex, -1, 'expected fallback warning after non-cancellation failure');
   assert.notEqual(manualInstallIndex, -1, 'expected manual install fallback after winget failure');
   assert.ok(tryIndex < wingetInstallIndex, 'expected try block before winget install');
   assert.ok(wingetInstallIndex < catchIndex, 'expected catch block after winget install');
-  assert.ok(catchIndex < manualInstallIndex, 'expected manual install fallback after protected winget path');
+  assert.ok(catchIndex < cancelExitIndex, 'expected cancellation handling inside winget catch path');
+  assert.ok(cancelExitIndex < fallbackWarnIndex, 'expected normal fallback after cancellation check');
+  assert.ok(fallbackWarnIndex < manualInstallIndex, 'expected manual install fallback after protected winget path');
 });
 
 test('Windows installer retries plain pnpm install when frozen lockfile mode hits a native command error', () => {
   const frozenInstallIndex = installScript.indexOf('Invoke-Pnpm -CommandArgs @("install", "--frozen-lockfile") 2>$null');
   const tryIndex = installScript.lastIndexOf('try {', frozenInstallIndex);
-  const catchIndex = installScript.indexOf('} catch {}', frozenInstallIndex);
+  const catchIndex = installScript.indexOf('} catch {', frozenInstallIndex);
+  const capturedErrorIndex = installScript.indexOf('$frozenInstallError = $_', catchIndex);
+  const cancelExitIndex = installScript.indexOf('Exit-InstallerIfCancelled -ErrorRecord $frozenInstallError -Context "pnpm install"');
   const retryWarnIndex = installScript.indexOf('Write-Warn "Frozen lockfile failed, retrying..."');
   const retryInstallIndex = installScript.indexOf('Invoke-Pnpm -CommandArgs @("install")', retryWarnIndex);
 
   assert.notEqual(frozenInstallIndex, -1, 'expected frozen lockfile install attempt');
   assert.notEqual(tryIndex, -1, 'expected frozen lockfile attempt to be wrapped in try/catch');
-  assert.notEqual(catchIndex, -1, 'expected frozen lockfile attempt to swallow native command errors');
+  assert.notEqual(catchIndex, -1, 'expected frozen lockfile attempt catch block');
+  assert.notEqual(capturedErrorIndex, -1, 'expected frozen lockfile catch to capture the error record');
+  assert.notEqual(cancelExitIndex, -1, 'expected retry path to abort on user cancellation');
   assert.notEqual(retryWarnIndex, -1, 'expected retry warning after frozen lockfile failure');
   assert.notEqual(retryInstallIndex, -1, 'expected plain pnpm install retry after frozen lockfile failure');
   assert.ok(tryIndex < frozenInstallIndex, 'expected try block before frozen lockfile install');
   assert.ok(frozenInstallIndex < catchIndex, 'expected catch block after frozen lockfile install');
-  assert.ok(catchIndex < retryWarnIndex, 'expected retry warning after protected frozen lockfile path');
+  assert.ok(catchIndex < capturedErrorIndex, 'expected frozen lockfile catch to save the error record');
+  assert.ok(capturedErrorIndex < cancelExitIndex, 'expected cancellation check before retry warning');
+  assert.ok(cancelExitIndex < retryWarnIndex, 'expected retry warning after protected frozen lockfile path');
   assert.ok(retryWarnIndex < retryInstallIndex, 'expected plain install retry after warning');
 });
 
@@ -139,13 +153,14 @@ test('Windows tool resolution prefers explicit shim candidates before generic Ge
 test('Windows installer uses interactive selectors instead of typed or letter-based menus', () => {
   assert.match(uiHelpersScript, /function Select-InstallerChoice/);
   assert.match(uiHelpersScript, /function Select-InstallerMultiChoice/);
-  assert.match(uiHelpersScript, /Use .*Enter to select/);
+  assert.match(uiHelpersScript, /Use Up\/Down arrows to move, Enter to select/);
   assert.match(uiHelpersScript, /Space to toggle, Enter to confirm/);
   assert.match(installScript, /Select-InstallerMultiChoice -Title "Missing agent CLIs"/);
   assert.doesNotMatch(uiHelpersScript, /Label = "&All"/);
   assert.doesNotMatch(uiHelpersScript, /Label = "&Select"/);
   assert.doesNotMatch(uiHelpersScript, /Prompt "Install \$\(\$option.Name\)\?"/);
   assert.doesNotMatch(installScript, /Read-Host "    Install which\?/);
+  assert.doesNotMatch(uiHelpersScript, /↑|↓|◉|◯/);
   assert.match(helpersScript, /Select-InstallerChoice -Title "Claude auth"/);
   assert.match(helpersScript, /Select-InstallerChoice -Title "Codex auth"/);
   assert.match(helpersScript, /Select-InstallerChoice -Title "Gemini auth"/);
@@ -175,13 +190,38 @@ test('Windows CLI installs use the explicit npm command path and Redis mode only
   assert.match(installScript, /\$npmInstallCommand = Resolve-ToolCommand -Name "npm"/);
   assert.match(installScript, /& \$npmInstallCommand install -g \$tool\.Pkg 2>\$null/);
   assert.match(uiHelpersScript, /Select-InstallerChoice -Title "Redis setup"/);
-  assert.match(uiHelpersScript, /Install Redis locally \(recommended \/ 推荐\)/);
-  assert.match(uiHelpersScript, /Use external Redis URL \/ 使用外部 Redis/);
+  assert.match(uiHelpersScript, /Install Redis locally \(recommended\)/);
+  assert.match(uiHelpersScript, /Use external Redis URL/);
   assert.match(uiHelpersScript, /Value = "portable"/);
   assert.match(uiHelpersScript, /Value = "external"/);
   assert.doesNotMatch(uiHelpersScript, /Value = "memory"/);
   assert.doesNotMatch(uiHelpersScript, /using memory storage/);
   assert.doesNotMatch(uiHelpersScript, /Write-Warn "Memory mode — data will be lost on restart"/);
+});
+
+test('Windows installer exits immediately when native installs are cancelled by the user', () => {
+  assert.match(installScript, /function Test-InstallerCancellation/);
+  assert.match(installScript, /function Exit-InstallerIfCancelled/);
+  assert.match(installScript, /PipelineStoppedException/);
+  assert.match(installScript, /OperationStoppedException/);
+  assert.match(installScript, /if \(Test-InstallerCancellation -ErrorRecord \$ErrorRecord\) \{/);
+  assert.match(installScript, /Write-Err "\$Context cancelled by user"/);
+  assert.match(installScript, /Exit-InstallerIfCancelled -ErrorRecord \$_ -Context "pnpm installation"/);
+  assert.match(installScript, /Exit-InstallerIfCancelled -ErrorRecord \$frozenInstallError -Context "pnpm install"/);
+  assert.match(installScript, /Exit-InstallerIfCancelled -ErrorRecord \$_ -Context "\$\(\$tool.Name\) CLI install"/);
+  assert.match(installScript, /exit 1/);
+});
+
+test('Windows PowerShell scripts stay ASCII-only to avoid console codepage issues', () => {
+  const windowsScriptBundle = [
+    installScript,
+    helpersScript,
+    uiHelpersScript,
+    startWindowsScript,
+    stopWindowsScript
+  ].join('\n');
+
+  assert.doesNotMatch(windowsScriptBundle, /[^\x00-\x7F]/);
 });
 
 test('Windows portable Redis defers REDIS_URL to runtime instead of hardcoding localhost:6379', () => {
