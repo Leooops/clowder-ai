@@ -153,8 +153,15 @@ test('Windows tool resolution prefers explicit shim candidates before generic Ge
 test('Windows installer uses interactive selectors instead of typed or letter-based menus', () => {
   assert.match(uiHelpersScript, /function Select-InstallerChoice/);
   assert.match(uiHelpersScript, /function Select-InstallerMultiChoice/);
+  assert.match(uiHelpersScript, /if \(-not \$text\) \{ \$text = \$Option\.Name \}/);
+  assert.match(uiHelpersScript, /if \(-not \$text\) \{ \$text = \$Option\.Cmd \}/);
+  assert.match(uiHelpersScript, /\[\*\] /);
+  assert.match(uiHelpersScript, /\[ \] /);
   assert.match(uiHelpersScript, /Use Up\/Down arrows to move, Enter to select/);
   assert.match(uiHelpersScript, /Space to toggle, Enter to confirm/);
+  assert.match(installScript, /Name = "Claude"; Label = "Claude"; Cmd = "claude"/);
+  assert.match(installScript, /Name = "Codex"; Label = "Codex"; Cmd = "codex"/);
+  assert.match(installScript, /Name = "Gemini"; Label = "Gemini"; Cmd = "gemini"/);
   assert.match(installScript, /Select-InstallerMultiChoice -Title "Missing agent CLIs"/);
   assert.doesNotMatch(uiHelpersScript, /Label = "&All"/);
   assert.doesNotMatch(uiHelpersScript, /Label = "&Select"/);

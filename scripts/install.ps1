@@ -277,9 +277,9 @@ Mount-InstallerSkills -ProjectRoot $ProjectRoot
 Write-Step "Step 6/9 - AI CLI tools"
 
 $cliTools = @(
-    @{ Name = "Claude"; Cmd = "claude"; Pkg = "@anthropic-ai/claude-code" },
-    @{ Name = "Codex"; Cmd = "codex"; Pkg = "@openai/codex" },
-    @{ Name = "Gemini"; Cmd = "gemini"; Pkg = "@google/gemini-cli" }
+    @{ Name = "Claude"; Label = "Claude"; Cmd = "claude"; Pkg = "@anthropic-ai/claude-code" },
+    @{ Name = "Codex"; Label = "Codex"; Cmd = "codex"; Pkg = "@openai/codex" },
+    @{ Name = "Gemini"; Label = "Gemini"; Cmd = "gemini"; Pkg = "@google/gemini-cli" }
 )
 
 if (-not $SkipCli) {

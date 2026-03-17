@@ -15,7 +15,12 @@ const SHARED_STATE_PATTERN = /^(docs\/BACKLOG\.md|cat-config\.json)$/;
 /** Safe git exec — returns trimmed stdout or empty string on failure. */
 function safeExec(cmd: string, args: string[], cwd: string): string {
   try {
-    return execFileSync(cmd, args, { cwd, encoding: 'utf-8', timeout: 5000 }).trim();
+    return execFileSync(cmd, args, {
+      cwd,
+      encoding: 'utf-8',
+      timeout: 5000,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
   } catch {
     return '';
   }
@@ -42,17 +47,12 @@ function diffUnpushedShared(ref: string, cwd: string): string[] {
 
 export function checkSharedStatePreflight(projectRoot: string): SharedStatePreflightResult {
   try {
+    const isGitRepo = safeExec('git', ['rev-parse', '--is-inside-work-tree'], projectRoot) === 'true';
+    if (!isGitRepo) return { ok: true };
+
     // Check uncommitted changes to shared state
-    const uncommittedRaw = execFileSync('git', ['diff', '--name-only'], {
-      cwd: projectRoot,
-      encoding: 'utf-8',
-      timeout: 5000,
-    }).trim();
-    const stagedRaw = execFileSync('git', ['diff', '--cached', '--name-only'], {
-      cwd: projectRoot,
-      encoding: 'utf-8',
-      timeout: 5000,
-    }).trim();
+    const uncommittedRaw = safeExec('git', ['diff', '--name-only'], projectRoot);
+    const stagedRaw = safeExec('git', ['diff', '--cached', '--name-only'], projectRoot);
 
     const uncommittedShared = [...uncommittedRaw.split('\n'), ...stagedRaw.split('\n')].filter(
       (f: string) => f && SHARED_STATE_PATTERN.test(f),
@@ -60,35 +60,23 @@ export function checkSharedStatePreflight(projectRoot: string): SharedStatePrefl
 
     // Check unpushed commits touching shared state
     let unpushedShared: string[] = [];
-    try {
-      const upstream = execFileSync('git', ['rev-parse', '--abbrev-ref', '@{upstream}'], {
-        cwd: projectRoot,
-        encoding: 'utf-8',
-        timeout: 5000,
-      }).trim();
-
-      if (upstream) {
-        unpushedShared = diffUnpushedShared(upstream, projectRoot);
-      }
-    } catch {
+    const upstream = safeExec('git', ['rev-parse', '--abbrev-ref', '@{upstream}'], projectRoot);
+    if (upstream) {
+      unpushedShared = diffUnpushedShared(upstream, projectRoot);
+    } else {
       // No upstream — try origin/<branch>, then fall back to origin/main merge-base
       const branch = safeExec('git', ['branch', '--show-current'], projectRoot);
       if (branch) {
-        try {
-          // Verify origin/<branch> exists before diffing
-          execFileSync('git', ['rev-parse', '--verify', `origin/${branch}`], {
-            cwd: projectRoot,
-            encoding: 'utf-8',
-            timeout: 5000,
-          });
+        const remoteBranch = safeExec('git', ['rev-parse', '--verify', `origin/${branch}`], projectRoot);
+        if (remoteBranch) {
           unpushedShared = diffUnpushedShared(`origin/${branch}`, projectRoot);
-        } catch {
+        } else {
           // origin/<branch> doesn't exist (new branch) — fall back to merge-base with origin/main
           const mergeBase = safeExec('git', ['merge-base', 'HEAD', 'origin/main'], projectRoot);
           if (mergeBase) {
             unpushedShared = diffUnpushedShared(mergeBase, projectRoot);
           }
-        }
+        } 
       }
     }
 

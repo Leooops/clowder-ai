@@ -198,8 +198,8 @@ function isGitRepositoryPath(workingDirectory: string): boolean {
 }
 
 function buildGitRepoArgs(workingDirectory?: string): string[] {
-  if (!workingDirectory) return [];
-  return isGitRepositoryPath(workingDirectory) ? [] : ['--skip-git-repo-check'];
+  const repoCheckDir = workingDirectory ?? process.cwd();
+  return isGitRepositoryPath(repoCheckDir) ? [] : ['--skip-git-repo-check'];
 }
 
 /**

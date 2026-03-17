@@ -12,7 +12,11 @@ function Test-InstallerConsoleUi {
 
 function Get-InstallerOptionText {
     param($Option)
-    return ([string]$Option.Label).Replace("&", "")
+    $text = $Option.Label
+    if (-not $text) { $text = $Option.Name }
+    if (-not $text) { $text = $Option.Cmd }
+    if (-not $text) { $text = $Option.Value }
+    return ([string]$text).Replace("&", "")
 }
 
 function Write-InstallerChoiceScreen {
@@ -36,7 +40,7 @@ function Write-InstallerChoiceScreen {
         $prefix = if ($i -eq $ActiveIndex) { "> " } else { "  " }
         $marker = ""
         if ($SelectedMap) {
-            $marker = if ($SelectedMap.ContainsKey($i)) { "[x] " } else { "[ ] " }
+            $marker = if ($SelectedMap.ContainsKey($i)) { "[*] " } else { "[ ] " }
         }
         $line = "$prefix$marker$(Get-InstallerOptionText $Options[$i])"
         $color = if ($i -eq $ActiveIndex) { "Cyan" } else { "White" }
