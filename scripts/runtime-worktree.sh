@@ -243,6 +243,16 @@ start_runtime_worktree() {
     fi
   fi
 
+  # F115 KD-6: inject source repo .env into child process (no disk write)
+  # Respects Iron Law §3 (Config Immutability) — never write to runtime dir
+  if [ ! -f "$RUNTIME_DIR/.env" ] && [ -f "$PROJECT_DIR/.env" ]; then
+    info "injecting env from source repo (not writing to runtime dir)"
+    set -a
+    # shellcheck disable=SC1091
+    source "$PROJECT_DIR/.env"
+    set +a
+  fi
+
   info "starting production stack from runtime worktree: $RUNTIME_DIR"
   cd "$RUNTIME_DIR"
   # Runtime = production: auto-inject --prod-web for PWA + Tailscale support.
