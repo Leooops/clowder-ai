@@ -236,7 +236,7 @@ describe('useAgentMessages loading lifecycle', () => {
       storeState.currentThreadId = 'thread-2';
 
       act(() => {
-        vi.advanceTimersByTime(5 * 60 * 1000);
+        vi.advanceTimersByTime(10 * 60 * 1000);
       });
 
       expect(mockAddMessage).not.toHaveBeenCalledWith(
@@ -332,7 +332,7 @@ describe('useAgentMessages loading lifecycle', () => {
       });
 
       act(() => {
-        vi.advanceTimersByTime(5 * 60 * 1000);
+        vi.advanceTimersByTime(10 * 60 * 1000);
       });
 
       expect(mockAddMessageToThread).not.toHaveBeenCalledWith(
@@ -380,7 +380,7 @@ describe('useAgentMessages loading lifecycle', () => {
       });
 
       act(() => {
-        vi.advanceTimersByTime(5 * 60 * 1000);
+        vi.advanceTimersByTime(10 * 60 * 1000);
       });
 
       expect(mockAddMessage).toHaveBeenCalledWith(
@@ -422,7 +422,7 @@ describe('useAgentMessages loading lifecycle', () => {
       mockClearCatStatuses.mockClear();
 
       act(() => {
-        vi.advanceTimersByTime(5 * 60 * 1000);
+        vi.advanceTimersByTime(10 * 60 * 1000);
       });
 
       expect(mockAddMessage).not.toHaveBeenCalled();

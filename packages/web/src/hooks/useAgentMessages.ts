@@ -5,8 +5,8 @@ import { recordDebugEvent } from '@/debug/invocationEventDebug';
 import { useChatStore } from '@/stores/chatStore';
 import { compactToolResultDetail } from '@/utils/toolPreview';
 
-/** Timeout for done(isFinal) - 5 minutes */
-const DONE_TIMEOUT_MS = 5 * 60 * 1000;
+/** Timeout for done(isFinal) - 10 minutes (matches CLI timeout) */
+const DONE_TIMEOUT_MS = 10 * 60 * 1000;
 /** Monotonic counter for collision-safe callback bubble IDs */
 let cbSeq = 0;
 const DEBUG_SKIP_FILE_CHANGE_UI = process.env.NEXT_PUBLIC_DEBUG_SKIP_FILE_CHANGE_UI === '1';
@@ -100,6 +100,8 @@ export function useAgentMessages() {
 
   /** Map<catId, { id: messageId, catId }> — one entry per active stream */
   const activeRefs = useRef<Map<string, { id: string; catId: string }>>(new Map());
+  /** #30 fix: Track whether tool events were seen in this invocation (for timeout message) */
+  const sawToolEventsRef = useRef(false);
   /** Track callback-replaced invocations so delayed stream chunks do not recreate ghost bubbles. */
   const replacedInvocationsRef = useRef<Map<string, string>>(new Map());
 
@@ -130,6 +132,12 @@ export function useAgentMessages() {
       const store = useChatStore.getState();
       const isActiveThreadTimeout = store.currentThreadId === timeoutThreadId;
 
+      // #30 fix: Context-aware timeout message (read before clearing)
+      const timeoutContent = sawToolEventsRef.current
+        ? '⏱ 工具已执行但最终响应未返回。CLI 可能仍在后台运行，或已超时终止。'
+        : '⏱ Response timed out. The operation may still be running in the background.';
+      sawToolEventsRef.current = false;
+
       if (!isActiveThreadTimeout) {
         const threadState = store.getThreadState(timeoutThreadId);
         for (const message of threadState.messages) {
@@ -142,7 +150,7 @@ export function useAgentMessages() {
           id: `sysinfo-timeout-${Date.now()}`,
           type: 'system',
           variant: 'info',
-          content: '⏱ Response timed out. The operation may still be running in the background.',
+          content: timeoutContent,
           timestamp: Date.now(),
         });
         return;
@@ -161,7 +169,7 @@ export function useAgentMessages() {
         id: `sysinfo-timeout-${Date.now()}`,
         type: 'system',
         variant: 'info',
-        content: '⏱ Response timed out. The operation may still be running in the background.',
+        content: timeoutContent,
         timestamp: Date.now(),
       });
     }, DONE_TIMEOUT_MS);
@@ -454,6 +462,7 @@ export function useAgentMessages() {
           }
         }
       } else if (msg.type === 'tool_use') {
+        sawToolEventsRef.current = true;
         setCatStatus(msg.catId, 'streaming');
         sawStreamDataRef.current.add(msg.catId);
         const toolName = msg.toolName ?? 'unknown';
@@ -545,6 +554,7 @@ export function useAgentMessages() {
           setIntentMode(null);
           clearCatStatuses();
           a2aGroupRef.current = null;
+          sawToolEventsRef.current = false;
           // Bug C safety net: if done(isFinal) arrived but no streaming bubble
           // was ever created for this cat, text events were lost (socket transport
           // drop, dual-pointer guard mismatch, etc.). Request a history catch-up
@@ -870,7 +880,8 @@ export function useAgentMessages() {
         });
         // Only stop loading on isFinal; size===0 would false-positive in serial gaps
         if (msg.isFinal) {
-          clearDoneTimeout(); // prevent 5-min timer from firing timeout text after error
+          sawToolEventsRef.current = false;
+          clearDoneTimeout(); // prevent done-timeout from firing after error
           setLoading(false);
           // F108: clear this cat's invocation slot on terminal error
           if (msg.invocationId) {
@@ -928,6 +939,7 @@ export function useAgentMessages() {
   const handleStop = useCallback(
     (cancelFn: (threadId: string) => void, threadId: string) => {
       cancelFn(threadId);
+      sawToolEventsRef.current = false;
       const store = useChatStore.getState();
       const isActiveThreadStop = threadId === store.currentThreadId;
 
