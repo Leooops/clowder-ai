@@ -30,7 +30,13 @@ function Write-Warn  { param([string]$msg) Write-Host "  [!!] $msg" -ForegroundC
 function Write-Err   { param([string]$msg) Write-Host "  [ERR] $msg" -ForegroundColor Red }
 
 # ── Resolve project root ────────────────────────────────────
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$ScriptPath = if ($PSCommandPath) { $PSCommandPath } elseif ($MyInvocation.MyCommand.Path) { $MyInvocation.MyCommand.Path } else { $null }
+if (-not $ScriptPath) {
+    Write-Err "Could not resolve start-windows.ps1 path. Run with: powershell -ExecutionPolicy Bypass -File .\scripts\start-windows.ps1"
+    exit 1
+}
+$ScriptDir = Split-Path -Parent $ScriptPath
+. (Join-Path $ScriptDir "install-windows-helpers.ps1")
 $ProjectRoot = Split-Path -Parent $ScriptDir
 Set-Location $ProjectRoot
 
@@ -55,6 +61,13 @@ if (Test-Path $envFile) {
 } else {
     Write-Warn ".env not found — using defaults"
 }
+
+$pnpmCommand = Resolve-ToolCommand -Name "pnpm"
+if (-not $pnpmCommand) {
+    Write-Err "pnpm not found. Run .\scripts\install.ps1 first."
+    exit 1
+}
+Write-Ok "pnpm: $pnpmCommand"
 
 # ── Ports ───────────────────────────────────────────────────
 $ApiPort = if ($env:API_SERVER_PORT) { $env:API_SERVER_PORT } else { "3004" }
@@ -83,11 +96,30 @@ Write-Step "Storage"
 
 $useRedis = -not $Memory
 $startedRedis = $false
+$redisLayout = Resolve-PortableRedisLayout -ProjectRoot $ProjectRoot
+$redisCliPath = $null
+$redisServerPath = $null
+$redisSource = $null
+$redisLogFile = Join-Path $redisLayout.Logs "redis-$RedisPort.log"
+$redisPidFile = Join-Path $redisLayout.Data "redis-$RedisPort.pid"
 
 if ($useRedis) {
+    $redisCommands = Resolve-PortableRedisBinaries -ProjectRoot $ProjectRoot
+    if (-not $redisCommands) {
+        $redisCommands = Resolve-GlobalRedisBinaries
+    }
+    if ($redisCommands) {
+        $redisCliPath = $redisCommands.CliPath
+        $redisServerPath = $redisCommands.ServerPath
+        $redisSource = $redisCommands.Source
+        Write-Ok "Redis binaries resolved ($redisSource): $($redisCommands.BinDir)"
+    }
     # Check if Redis is already running
     try {
-        $redisPing = & redis-cli -p $RedisPort ping 2>$null
+        if (-not $redisCliPath) {
+            throw "redis-cli unavailable"
+        }
+        $redisPing = & $redisCliPath -p $RedisPort ping 2>$null
         if ($redisPing -eq "PONG") {
             Write-Ok "Redis already running on port $RedisPort"
             $env:REDIS_URL = "redis://localhost:$RedisPort"
@@ -98,12 +130,14 @@ if ($useRedis) {
         Write-Warn "Redis not running on port $RedisPort"
         # Try to start Redis
         try {
-            $redisExe = Get-Command redis-server -ErrorAction SilentlyContinue
-            if ($redisExe) {
-                Write-Host "  Starting Redis on port $RedisPort..."
-                Start-Process -FilePath "redis-server" -ArgumentList "--port $RedisPort --bind 127.0.0.1" -WindowStyle Hidden
+            if ($redisServerPath) {
+                New-Item -Path $redisLayout.Data -ItemType Directory -Force | Out-Null
+                New-Item -Path $redisLayout.Logs -ItemType Directory -Force | Out-Null
+                $redisArgs = @("--port", $RedisPort, "--bind", "127.0.0.1", "--dir", $redisLayout.Data, "--logfile", $redisLogFile, "--pidfile", $redisPidFile)
+                Write-Host "  Starting Redis on port $RedisPort ($redisSource)..."
+                Start-Process -FilePath $redisServerPath -ArgumentList $redisArgs -WindowStyle Hidden
                 Start-Sleep -Seconds 2
-                $redisPing = & redis-cli -p $RedisPort ping 2>$null
+                $redisPing = & $redisCliPath -p $RedisPort ping 2>$null
                 if ($redisPing -eq "PONG") {
                     Write-Ok "Redis started on port $RedisPort"
                     $env:REDIS_URL = "redis://localhost:$RedisPort"
@@ -114,7 +148,7 @@ if ($useRedis) {
                 }
             } else {
                 Write-Warn "Redis not installed — using memory storage"
-                Write-Warn "Install Memurai for persistent storage: https://www.memurai.com/"
+                Write-Warn "Run .\\scripts\\install.ps1 again to fetch the project-local Redis bundle into .cat-cafe/redis/windows."
                 $useRedis = $false
             }
         } catch {
@@ -136,26 +170,26 @@ if (-not $Quick) {
 
     Write-Host "  Building shared..."
     Push-Location (Join-Path $ProjectRoot "packages/shared")
-    & pnpm run build
+    & $pnpmCommand run build
     Pop-Location
     Write-Ok "shared"
 
     Write-Host "  Building mcp-server..."
     Push-Location (Join-Path $ProjectRoot "packages/mcp-server")
-    & pnpm run build
+    & $pnpmCommand run build
     Pop-Location
     Write-Ok "mcp-server"
 
     Write-Host "  Building api..."
     Push-Location (Join-Path $ProjectRoot "packages/api")
-    & pnpm run build
+    & $pnpmCommand run build
     Pop-Location
     Write-Ok "api"
 
     if (-not $Dev) {
         Write-Host "  Building web (production)..."
         Push-Location (Join-Path $ProjectRoot "packages/web")
-        & pnpm run build
+        & $pnpmCommand run build
         Pop-Location
         Write-Ok "web (production)"
     }
@@ -178,7 +212,7 @@ $jobs = @()
 
 # API Server
 # Env vars are loaded into this process (line 42-53) and inherited by Start-Job.
-# No --env-file needed — avoids Node < 20.6 breakage.
+# No --env-file needed — avoids depending on Node's --env-file support here.
 Write-Host "  Starting API Server (port $ApiPort)..."
 $apiJob = Start-Job -ScriptBlock {
     param($root, $envFile)
@@ -209,12 +243,12 @@ if ($Dev) {
     # Development mode: next dev (hot reload)
     Write-Host "  Starting Frontend (port $WebPort, dev)..."
     $webJob = Start-Job -ScriptBlock {
-        param($root, $port)
+        param($root, $port, $pnpmPath)
         Set-Location (Join-Path $root "packages/web")
         $env:PORT = $port
         $env:NEXT_IGNORE_INCORRECT_LOCKFILE = "1"
-        & pnpm exec next dev -p $port 2>&1
-    } -ArgumentList $ProjectRoot, $WebPort
+        & $pnpmPath exec next dev -p $port 2>&1
+    } -ArgumentList $ProjectRoot, $WebPort, $pnpmCommand
 } else {
     # Production mode: next start (default — avoids #105 issues)
     $nextDir = Join-Path $ProjectRoot "packages/web/.next"
@@ -224,11 +258,11 @@ if ($Dev) {
     }
     Write-Host "  Starting Frontend (port $WebPort, production)..."
     $webJob = Start-Job -ScriptBlock {
-        param($root, $port)
+        param($root, $port, $pnpmPath)
         Set-Location (Join-Path $root "packages/web")
         $env:PORT = $port
-        & pnpm exec next start -p $port -H 0.0.0.0 2>&1
-    } -ArgumentList $ProjectRoot, $WebPort
+        & $pnpmPath exec next start -p $port -H 0.0.0.0 2>&1
+    } -ArgumentList $ProjectRoot, $WebPort, $pnpmCommand
 }
 $jobs += $webJob
 
@@ -283,7 +317,7 @@ try {
 
     if ($startedRedis) {
         try {
-            & redis-cli -p $RedisPort shutdown save 2>$null
+            & $redisCliPath -p $RedisPort shutdown save 2>$null
             Write-Ok "Redis stopped"
         } catch {
             Write-Warn "Could not stop Redis gracefully"

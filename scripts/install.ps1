@@ -35,12 +35,28 @@ function Refresh-Path {
                 [System.Environment]::GetEnvironmentVariable("Path", "User")
 }
 
+function Resolve-PnpmCommand {
+    Resolve-ToolCommand -Name "pnpm"
+}
+
+function Invoke-Pnpm {
+    param([string[]]$Args)
+    Invoke-ToolCommand -Name "pnpm" -Args $Args
+}
+
+$ScriptPath = if ($PSCommandPath) { $PSCommandPath } elseif ($MyInvocation.MyCommand.Path) { $MyInvocation.MyCommand.Path } else { $null }
+if (-not $ScriptPath) {
+    Write-Err "Could not resolve install.ps1 path. Run with: powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1"
+    exit 1
+}
+$ScriptDir = Split-Path -Parent $ScriptPath
+. (Join-Path $ScriptDir "install-windows-helpers.ps1")
+
 function Resolve-ProjectRoot {
-    $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-    $projectRoot = Split-Path -Parent $scriptDir
+    $projectRoot = Split-Path -Parent $ScriptDir
     if (-not (Test-Path (Join-Path $projectRoot "package.json")) -or
         -not (Test-Path (Join-Path $projectRoot "packages/api"))) {
-        Write-Err "Run this helper from a checked-out clowder-ai repo: .\\scripts\\install.ps1"
+        Write-Err "Run this helper from a checked-out clowder-ai repo: .\scripts\install.ps1"
         exit 1
     }
     & git -C $projectRoot rev-parse --is-inside-work-tree 1>$null 2>$null
@@ -62,14 +78,15 @@ Write-Ok "PowerShell $($PSVersionTable.PSVersion)"
 $hasWinget = $null -ne (Get-Command winget -ErrorAction SilentlyContinue)
 if ($hasWinget) { Write-Ok "winget available" } else { Write-Warn "winget not found — manual install may be needed" }
 
-# Git (required prerequisite per F113 spec)
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     Write-Err "Git not found. Install from https://git-scm.com/ and re-run."
     exit 1
 }
 Write-Ok "Git: $(git --version)"
 
-# ── Step 2: Node.js and pnpm ──────────────────────────────
+$ProjectRoot = Resolve-ProjectRoot
+$authState = New-InstallerAuthState -ProjectRoot $ProjectRoot
+
 Write-Step "Step 2/9 - Node.js and pnpm"
 
 $nodeOk = $false
@@ -77,7 +94,6 @@ try {
     $nodeRaw = & node --version 2>$null
     if ($nodeRaw -match 'v(\d+)\.(\d+)') {
         $nodeMajor = [int]$Matches[1]
-        $nodeMinor = [int]$Matches[2]
         if ($nodeMajor -ge 20) {
             Write-Ok "Node.js $nodeRaw"
             $nodeOk = $true
@@ -104,11 +120,11 @@ if (-not $nodeOk) {
     }
 }
 
-# pnpm: corepack → npm fallback
 $pnpmOk = $false
 try {
-    $pnpmRaw = & pnpm --version 2>$null
-    if ($pnpmRaw -match '^(\d+)\.' -and [int]$Matches[1] -ge 8) {
+    $pnpmCommand = Resolve-PnpmCommand
+    if ($pnpmCommand) { $pnpmRaw = & $pnpmCommand --version 2>$null }
+    if ($pnpmRaw -and $pnpmRaw -match '^(\d+)\.' -and [int]$Matches[1] -ge 8) {
         Write-Ok "pnpm $pnpmRaw"
         $pnpmOk = $true
     }
@@ -117,19 +133,29 @@ try {
 if (-not $pnpmOk) {
     Write-Host "  Installing pnpm..."
     try {
-        & corepack enable 2>$null
-        & corepack prepare pnpm@latest --activate 2>$null
+        Invoke-ToolCommand -Name "corepack" -Args @("enable") 2>$null
+        Invoke-ToolCommand -Name "corepack" -Args @("prepare", "pnpm@latest", "--activate") 2>$null
         Refresh-Path
-        $pnpmRaw = & pnpm --version 2>$null
-        Write-Ok "pnpm $pnpmRaw (via corepack)"
-        $pnpmOk = $true
+        $pnpmCommand = Resolve-PnpmCommand
+        if ($pnpmCommand) {
+            $pnpmRaw = & $pnpmCommand --version 2>$null
+            Write-Ok "pnpm $pnpmRaw (via corepack)"
+            $pnpmOk = $true
+        } else {
+            throw "pnpm shim missing after corepack prepare"
+        }
     } catch {
         try {
-            & npm install -g pnpm 2>$null
+            Invoke-ToolCommand -Name "npm" -Args @("install", "-g", "pnpm") 2>$null
             Refresh-Path
-            $pnpmRaw = & pnpm --version 2>$null
-            Write-Ok "pnpm $pnpmRaw (via npm)"
-            $pnpmOk = $true
+            $pnpmCommand = Resolve-PnpmCommand
+            if ($pnpmCommand) {
+                $pnpmRaw = & $pnpmCommand --version 2>$null
+                Write-Ok "pnpm $pnpmRaw (via npm)"
+                $pnpmOk = $true
+            } else {
+                throw "pnpm shim missing after npm install"
+            }
         } catch {}
     }
     if (-not $pnpmOk) {
@@ -138,53 +164,35 @@ if (-not $pnpmOk) {
     }
 }
 
-# ── Step 3: Redis ──────────────────────────────────────────
 Write-Step "Step 3/9 - Redis"
 
-$hasRedis = $false
-if (-not $Memory) {
-    try {
-        $null = & redis-cli --version 2>$null
-        Write-Ok "Redis CLI available"
-        $hasRedis = $true
-    } catch {
-        Write-Warn "Redis not found — will use in-memory storage (data lost on restart)"
-        Write-Warn "For persistent storage, install Redis for Windows:"
-        Write-Warn "  https://github.com/redis-windows/redis-windows"
-    }
-} else {
-    Write-Warn "Memory mode (-Memory) — skipping Redis detection"
-}
+$hasRedis = Ensure-WindowsRedis -ProjectRoot $ProjectRoot -Memory:$Memory
 
-# ── Step 4: Repo-local build ──────────────────────────────
 Write-Step "Step 4/9 - Prepare current repo and build"
 
-$ProjectRoot = Resolve-ProjectRoot
 Set-Location $ProjectRoot
 Write-Ok "Using project root: $ProjectRoot"
 
-# Install dependencies
 Write-Host "  Running pnpm install..."
-& pnpm install --frozen-lockfile 2>$null
+Invoke-Pnpm -Args @("install", "--frozen-lockfile") 2>$null
 if ($LASTEXITCODE -ne 0) {
     Write-Warn "Frozen lockfile failed, retrying..."
-    & pnpm install
+    Invoke-Pnpm -Args @("install")
     if ($LASTEXITCODE -ne 0) { Write-Err "pnpm install failed"; exit 1 }
 }
 Write-Ok "Dependencies installed"
 
-# Build (shared → mcp-server → api → web)
 if (-not $SkipBuild) {
     $buildSteps = @(
-        @{ Name = "shared";     Path = "packages/shared" },
+        @{ Name = "shared"; Path = "packages/shared" },
         @{ Name = "mcp-server"; Path = "packages/mcp-server" },
-        @{ Name = "api";        Path = "packages/api" },
-        @{ Name = "web";        Path = "packages/web" }
+        @{ Name = "api"; Path = "packages/api" },
+        @{ Name = "web"; Path = "packages/web" }
     )
     foreach ($step in $buildSteps) {
         Write-Host "  Building $($step.Name)..."
         Push-Location (Join-Path $ProjectRoot $step.Path)
-        & pnpm run build
+        Invoke-Pnpm -Args @("run", "build")
         if ($LASTEXITCODE -ne 0) { Write-Err "Build failed: $($step.Name)"; Pop-Location; exit 1 }
         Pop-Location
         Write-Ok "$($step.Name)"
@@ -193,50 +201,19 @@ if (-not $SkipBuild) {
     Write-Warn "Build skipped (-SkipBuild)"
 }
 
-# ── Step 5: Skills mount ──────────────────────────────────
 Write-Step "Step 5/9 - Skills mount"
+Mount-InstallerSkills -ProjectRoot $ProjectRoot
 
-$skillsSource = Join-Path $ProjectRoot "cat-cafe-skills"
-$cliDirs = @("$env:USERPROFILE\.claude", "$env:USERPROFILE\.codex", "$env:USERPROFILE\.gemini")
-
-if (Test-Path $skillsSource) {
-    $skillItems = Get-ChildItem $skillsSource -Directory | Where-Object { $_.Name -ne "refs" }
-    foreach ($cliDir in $cliDirs) {
-        $skillsRoot = Join-Path $cliDir "skills"
-        if (-not (Test-Path $skillsRoot)) { New-Item -Path $skillsRoot -ItemType Directory -Force | Out-Null }
-        foreach ($skill in $skillItems) {
-            $skillTarget = Join-Path $skillsRoot $skill.Name
-            if (Test-Path $skillTarget) {
-                Write-Ok "Skill already mounted: $skillTarget"
-                continue
-            }
-            try {
-                cmd /c mklink /J "$skillTarget" "$($skill.FullName)" 2>$null | Out-Null
-                if (Test-Path $skillTarget) {
-                    Write-Ok "Skill mounted: $skillTarget"
-                } else {
-                    throw "junction failed"
-                }
-            } catch {
-                Write-Warn "Could not create junction for $skillTarget"
-                Write-Warn "Run manually: mklink /J `"$skillTarget`" `"$($skill.FullName)`""
-            }
-        }
-    }
-} else {
-    Write-Warn "cat-cafe-skills/ not found — skills mount skipped"
-}
-
-# ── Step 6: AI CLI tools ─────────────────────────────────
 Write-Step "Step 6/9 - AI CLI tools"
 
+$cliTools = @(
+    @{ Name = "Claude"; Cmd = "claude"; Pkg = "@anthropic-ai/claude-code" },
+    @{ Name = "Codex"; Cmd = "codex"; Pkg = "@openai/codex" },
+    @{ Name = "Gemini"; Cmd = "gemini"; Pkg = "@google/gemini-cli" }
+)
+
 if (-not $SkipCli) {
-    $cliTools = @(
-        @{ Name = "Claude"; Cmd = "claude"; Pkg = "@anthropic-ai/claude-code" },
-        @{ Name = "Codex";  Cmd = "codex";  Pkg = "@openai/codex" },
-        @{ Name = "Gemini"; Cmd = "gemini"; Pkg = "@google/gemini-cli" }
-    )
-    $missingTools = @($cliTools | Where-Object { -not (Get-Command $_.Cmd -ErrorAction SilentlyContinue) })
+    $missingTools = @($cliTools | Where-Object { -not (Resolve-ToolCommand -Name $_.Cmd) })
     $toolsToInstall = $missingTools
     if ($missingTools.Count -gt 0 -and [Environment]::UserInteractive -and -not $env:CI) {
         Write-Host "  Missing agent CLIs:"
@@ -258,7 +235,7 @@ if (-not $SkipCli) {
         }
     }
     foreach ($tool in $cliTools) {
-        $installed = $null -ne (Get-Command $tool.Cmd -ErrorAction SilentlyContinue)
+        $installed = $null -ne (Resolve-ToolCommand -Name $tool.Cmd)
         if ($installed) {
             Write-Ok "$($tool.Name) CLI already installed"
         } elseif ($toolsToInstall.Cmd -notcontains $tool.Cmd) {
@@ -266,9 +243,9 @@ if (-not $SkipCli) {
         } else {
             Write-Host "  Installing $($tool.Name) CLI..."
             try {
-                & npm install -g $tool.Pkg 2>$null
+                Invoke-ToolCommand -Name "npm" -Args @("install", "-g", $tool.Pkg) 2>$null
                 Refresh-Path
-                if (Get-Command $tool.Cmd -ErrorAction SilentlyContinue) {
+                if (Resolve-ToolCommand -Name $tool.Cmd) {
                     Write-Ok "$($tool.Name) CLI installed"
                 } else {
                     Write-Warn "$($tool.Name) CLI install may need PATH refresh — restart terminal"
@@ -282,14 +259,9 @@ if (-not $SkipCli) {
     Write-Warn "CLI tools install skipped (-SkipCli)"
 }
 
-# ── Step 7: Auth config placeholder ──────────────────────
 Write-Step "Step 7/9 - Auth config"
-Write-Warn "Authenticate CLI tools after installation:"
-Write-Warn "  Claude: run 'claude' and follow OAuth flow"
-Write-Warn "  Codex:  set OPENAI_API_KEY in .env"
-Write-Warn "  Gemini: run 'gemini' and follow OAuth flow"
+Configure-InstallerAuth -ProjectRoot $ProjectRoot -State $authState
 
-# ── Step 8: Generate .env ─────────────────────────────────
 Write-Step "Step 8/9 - Generate .env"
 
 $envFile = Join-Path $ProjectRoot ".env"
@@ -313,26 +285,25 @@ REDIS_URL=redis://localhost:6379
     Write-Ok "Minimal .env created"
 }
 
-# ── Step 9: Verify and summarize ──────────────────────────
+Apply-InstallerAuthEnv -State $authState -EnvFile $envFile
+
+$hasClaude = $null -ne (Resolve-ToolCommand -Name "claude")
+$hasCodex = $null -ne (Resolve-ToolCommand -Name "codex")
+$hasGemini = $null -ne (Resolve-ToolCommand -Name "gemini")
+
 Write-Step "Step 9/9 - Verify and launch"
 
-$artifacts = @("packages/shared/dist", "packages/mcp-server/dist/index.js",
-               "packages/api/dist/index.js", "packages/web/.next")
+$artifacts = @("packages/shared/dist", "packages/mcp-server/dist/index.js", "packages/api/dist/index.js", "packages/web/.next")
 $allGood = $true
 foreach ($artifact in $artifacts) {
     $fullPath = Join-Path $ProjectRoot $artifact
-    if (Test-Path $fullPath) { Write-Ok $artifact }
-    else { Write-Err "$artifact - missing!"; $allGood = $false }
+    if (Test-Path $fullPath) { Write-Ok $artifact } else { Write-Err "$artifact - missing!"; $allGood = $false }
 }
 
 if (-not $allGood -and -not $SkipBuild) {
     Write-Err "Build artifacts missing. Check build output above."
     exit 1
 }
-
-$hasClaude = $null -ne (Get-Command claude -ErrorAction SilentlyContinue)
-$hasCodex = $null -ne (Get-Command codex -ErrorAction SilentlyContinue)
-$hasGemini = $null -ne (Get-Command gemini -ErrorAction SilentlyContinue)
 
 Write-Host ""
 Write-Host "  ========================================" -ForegroundColor Green
