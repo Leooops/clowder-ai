@@ -105,7 +105,7 @@ function Get-InstallerExceptionDetails {
         $message = $exception.Message
         $typeName = $exception.GetType().FullName
         if ($message) {
-            $details += "[$level] $typeName: $message"
+            $details += "[$level] $($typeName): $message"
         } elseif ($typeName) {
             $details += "[$level] $typeName"
         }

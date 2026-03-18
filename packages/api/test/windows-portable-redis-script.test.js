@@ -287,6 +287,11 @@ test('Windows Redis failures print underlying exception details for installer an
   assert.match(startWindowsScript, /Write-InstallerExceptionDetails -Context "Redis start" -ErrorRecord \$_/);
 });
 
+test('Windows exception detail interpolation avoids PowerShell colon parsing traps', () => {
+  assert.match(helpersScript, /\$\(\$typeName\): \$message/);
+  assert.doesNotMatch(helpersScript, /\$typeName: \$message/);
+});
+
 test('Windows installer prefers plain portable Redis zips before service bundles', () => {
   const msys2Zip = helpersScript.indexOf('Windows-x64-msys2\\.zip$');
   const msys2ServiceZip = helpersScript.indexOf('Windows-x64-msys2-with-Service\\.zip$');
