@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-const { resolveCmdShimScript } = await import('../dist/utils/cli-spawn-win.js');
+const { resolveCmdShimScript, escapeCmdArg } = await import('../dist/utils/cli-spawn-win.js');
 
 test('resolveCmdShimScript supports %dp0 shims and keeps scanning where results until one resolves', () => {
   const tempRoot = mkdtempSync(join(tmpdir(), 'cli-spawn-win-'));
@@ -70,4 +70,37 @@ test('resolveCmdShimScript ignores the node.exe prelude and resolves the real sc
     process.env.PATH = originalPath;
     rmSync(tempRoot, { recursive: true, force: true });
   }
+});
+
+test('escapeCmdArg passes through simple arguments unchanged', () => {
+  assert.equal(escapeCmdArg('hello'), 'hello');
+  assert.equal(escapeCmdArg('simple-arg'), 'simple-arg');
+});
+
+test('escapeCmdArg wraps arguments containing spaces in double quotes', () => {
+  assert.equal(escapeCmdArg('hello world'), '"hello world"');
+  assert.equal(escapeCmdArg('C:\\Program Files\\app'), '"C:\\Program Files\\app"');
+});
+
+test('escapeCmdArg escapes internal double quotes', () => {
+  assert.equal(escapeCmdArg('say "hi"'), '"say \\"hi\\""');
+});
+
+test('escapeCmdArg doubles trailing backslashes to prevent closing quote escape', () => {
+  assert.equal(escapeCmdArg('arg\\'), '"arg\\\\"');
+  assert.equal(escapeCmdArg('path with spaces\\'), '"path with spaces\\\\"');
+  assert.equal(escapeCmdArg('trail\\\\'), '"trail\\\\\\\\"');
+});
+
+test('escapeCmdArg doubles percent signs to prevent env-var expansion', () => {
+  assert.equal(escapeCmdArg('%PATH%'), '"%%PATH%%"');
+});
+
+test('escapeCmdArg caret-escapes cmd.exe metacharacters', () => {
+  assert.equal(escapeCmdArg('a&b'), '"a^&b"');
+  assert.equal(escapeCmdArg('a|b'), '"a^|b"');
+  assert.equal(escapeCmdArg('a>b'), '"a^>b"');
+  assert.equal(escapeCmdArg('a<b'), '"a^<b"');
+  assert.equal(escapeCmdArg('a^b'), '"a^^b"');
+  assert.equal(escapeCmdArg('a!b'), '"a^!b"');
 });

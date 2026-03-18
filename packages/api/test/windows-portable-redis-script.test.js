@@ -226,7 +226,9 @@ test('Windows CLI installs use the explicit npm command path and Redis mode only
 test('Windows installer headless Redis planning respects existing external Redis defaults', () => {
   assert.match(uiHelpersScript, /function Get-InstallerExternalRedisUrl/);
   assert.match(uiHelpersScript, /Get-InstallerEnvValueFromFile -EnvFile \(Join-Path \$ProjectRoot "\.env"\) -Key "REDIS_URL"/);
-  assert.match(uiHelpersScript, /\} elseif \(\$defaultRedisUrl\) \{ "external" \} else \{ "portable" \}/);
+  assert.match(uiHelpersScript, /\} elseif \(\$defaultRedisUrl\) \{ "keep_external" \} else \{ "portable" \}/);
+  assert.match(uiHelpersScript, /if \(\$mode -eq "keep_external"\) \{/);
+  assert.match(uiHelpersScript, /Mode = "external"; RedisUrl = \$defaultRedisUrl/);
   assert.match(uiHelpersScript, /if \(Test-InstallerConsoleUi\) \{ Read-Host "  External Redis URL" \} else \{ \$defaultRedisUrl \}/);
 });
 

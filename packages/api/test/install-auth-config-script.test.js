@@ -177,6 +177,24 @@ test('claude-profile remove is a no-op on a fresh project without provider profi
   }
 });
 
+test('claude-profile set accepts API key from _INSTALLER_API_KEY environment variable', () => {
+  const projectRoot = mkdtempSync(join(tmpdir(), 'clowder-install-claude-env-key-'));
+
+  try {
+    execFileSync('node', [helperScript, 'claude-profile', 'set', '--project-dir', projectRoot], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      env: { ...process.env, _INSTALLER_API_KEY: 'env-api-key' },
+    });
+
+    const secretsFile = join(projectRoot, '.cat-cafe', 'provider-profiles.secrets.local.json');
+    const secrets = JSON.parse(readFileSync(secretsFile, 'utf8'));
+    assert.equal(secrets.providers.anthropic['installer-managed'].apiKey, 'env-api-key');
+  } finally {
+    rmSync(projectRoot, { recursive: true, force: true });
+  }
+});
+
 test('env-apply writes apostrophes with dotenv-compatible double quotes', () => {
   const envRoot = mkdtempSync(join(tmpdir(), 'clowder-install-env-apostrophe-'));
 
