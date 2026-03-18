@@ -326,6 +326,53 @@ describe('cats routes runtime CRUD', { concurrency: false }, () => {
     assert.match(patchBody.error, /incompatible with client "openai"/i);
   });
 
+  it('PATCH /api/cats/:id returns 400 when runtime catalog validation rejects the update', async () => {
+    const projectRoot = createProjectRoot();
+    process.env.CAT_TEMPLATE_PATH = join(projectRoot, 'cat-template.json');
+
+    const Fastify = (await import('fastify')).default;
+    const { catsRoutes } = await import('../dist/routes/cats.js');
+
+    const app = Fastify();
+    await app.register(catsRoutes);
+
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/api/cats',
+      headers: {
+        'content-type': 'application/json',
+        'x-cat-cafe-user': 'codex',
+      },
+      body: JSON.stringify({
+        catId: 'runtime-review-bot',
+        name: '运行时审查猫',
+        displayName: '运行时审查猫',
+        avatar: '/avatars/review.png',
+        color: { primary: '#334155', secondary: '#cbd5e1' },
+        mentionPatterns: ['@runtime-review-bot'],
+        roleDescription: '审查',
+        client: 'openai',
+        defaultModel: 'gpt-5.4',
+      }),
+    });
+    assert.equal(createRes.statusCode, 201);
+
+    const patchRes = await app.inject({
+      method: 'PATCH',
+      url: '/api/cats/runtime-review-bot',
+      headers: {
+        'content-type': 'application/json',
+        'x-cat-cafe-user': 'codex',
+      },
+      body: JSON.stringify({
+        mentionPatterns: ['@runtime-review-bot', '@opus'],
+      }),
+    });
+    assert.equal(patchRes.statusCode, 400);
+    const patchBody = JSON.parse(patchRes.body);
+    assert.match(patchBody.error, /mention alias "@opus" is already used by cat "opus"/i);
+  });
+
   it('DELETE /api/cats/:id removes runtime members from subsequent reads', async () => {
     const projectRoot = createProjectRoot();
     process.env.CAT_TEMPLATE_PATH = join(projectRoot, 'cat-template.json');

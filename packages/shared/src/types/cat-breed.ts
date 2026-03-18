@@ -69,6 +69,8 @@ export interface CatVariant {
   readonly color?: CatColor;
   /** Per-cat context budget (optional, falls back to defaults) */
   readonly contextBudget?: ContextBudget;
+  /** Optional per-variant override for sessionChain; falls back to breed.features.sessionChain. */
+  readonly sessionChain?: boolean;
   /** F34: Per-cat TTS voice (optional, falls back to defaults in cat-voices.ts) */
   readonly voiceConfig?: VoiceConfig;
   /** F-Ground-3: Human-readable strengths for teammate roster (overrides breed-level) */

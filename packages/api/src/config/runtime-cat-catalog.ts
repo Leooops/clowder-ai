@@ -313,7 +313,12 @@ export function updateRuntimeCat(projectRoot: string, catId: string, patch: Runt
     }
   }
   if (patch.sessionChain !== undefined) {
-    breed.features = { ...(breed.features ?? {}), sessionChain: patch.sessionChain };
+    if (located.isDefaultVariant) {
+      breed.features = { ...(breed.features ?? {}), sessionChain: patch.sessionChain };
+      delete variant.sessionChain;
+    } else {
+      variant.sessionChain = patch.sessionChain;
+    }
   }
   if (patch.provider !== undefined) variant.provider = patch.provider;
   if (patch.defaultModel !== undefined) variant.defaultModel = patch.defaultModel;

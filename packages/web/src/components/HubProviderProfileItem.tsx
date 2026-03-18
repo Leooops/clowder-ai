@@ -63,7 +63,6 @@ export function HubProviderProfileItem({
       ...(profile.authType === 'api_key' && editBaseUrl.trim() ? { baseUrl: editBaseUrl.trim() } : {}),
       ...(editApiKey.trim() ? { apiKey: editApiKey.trim() } : {}),
       models: editModels,
-      modelOverride: null,
     });
     setEditing(false);
   }, [editApiKey, editBaseUrl, editDisplayName, editModels, onSave, profile.authType, profile.id]);

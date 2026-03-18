@@ -144,6 +144,36 @@ describe('cat-catalog-store', () => {
     assert.equal(catalog.owner?.mentionPatterns[0], '@co-worker');
   });
 
+  it('keeps sessionChain updates scoped to non-default variants', async () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), 'cat-catalog-store-'));
+    const templatePath = join(projectRoot, 'cat-template.json');
+    const template = validConfig();
+    template.breeds[0].features = { sessionChain: true };
+    template.breeds[0].variants.push({
+      id: 'opus-sonnet',
+      catId: 'opus-sonnet',
+      provider: 'anthropic',
+      defaultModel: 'claude-sonnet-4-5-20250929',
+      mcpSupport: true,
+      cli: { command: 'claude', outputFormat: 'stream-json' },
+    });
+    writeFileSync(templatePath, JSON.stringify(template, null, 2));
+    bootstrapCatCatalog(projectRoot, templatePath);
+
+    await updateRuntimeCat(projectRoot, 'opus-sonnet', { sessionChain: false });
+
+    const catalog = readRuntimeCatCatalog(projectRoot);
+    const breed = catalog.breeds.find((item) => item.id === 'ragdoll');
+    assert.ok(breed, 'ragdoll breed should still exist');
+    assert.equal(breed.features?.sessionChain, true);
+    const sonnetVariant = breed.variants.find((variant) => variant.id === 'opus-sonnet');
+    assert.ok(sonnetVariant, 'opus-sonnet variant should still exist');
+    assert.equal(sonnetVariant.sessionChain, false);
+    const defaultVariant = breed.variants.find((variant) => variant.id === 'opus-default');
+    assert.ok(defaultVariant, 'opus-default variant should still exist');
+    assert.equal(defaultVariant.sessionChain, undefined);
+  });
+
   it('does not overwrite runtime catalog when validation fails', () => {
     const projectRoot = mkdtempSync(join(tmpdir(), 'cat-catalog-store-'));
     const templatePath = join(projectRoot, 'cat-template.json');

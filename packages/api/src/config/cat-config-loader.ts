@@ -63,6 +63,7 @@ const catVariantSchema = z.object({
   mcpSupport: z.boolean(),
   cli: cliConfigSchema,
   commandArgs: z.array(z.string().min(1)).optional(), // F127: explicit bridge args (e.g. Antigravity)
+  sessionChain: z.boolean().optional(), // F127 review fix: allow variant-scoped sessionChain override
   personality: z.string().optional(),
   strengths: z.array(z.string()).optional(),
   avatar: z.string().min(1).optional(), // F32-b P4c: override breed avatar
@@ -346,7 +347,11 @@ export function toAllCatConfigs(config: CatCafeConfig): Record<string, CatConfig
         // R1 fix: preserve null (explicit no-caution) in CatConfig; only omit if undefined
         ...(caution !== undefined ? { caution } : {}),
         ...(variant.strengths != null ? { strengths: variant.strengths } : {}),
-        ...(breed.features?.sessionChain !== undefined ? { sessionChain: breed.features.sessionChain } : {}),
+        ...(variant.sessionChain !== undefined
+          ? { sessionChain: variant.sessionChain }
+          : breed.features?.sessionChain !== undefined
+            ? { sessionChain: breed.features.sessionChain }
+            : {}),
       };
     }
   }

@@ -415,40 +415,50 @@ export const catsRoutes: FastifyPluginAsync<CatsRoutesOptions> = async (app, opt
     }
 
     const managedIdsBefore = getManagedCatalogIds(projectRoot);
-    updateRuntimeCat(projectRoot, request.params.id, {
-      ...(body.name !== undefined ? { name: body.name } : {}),
-      ...(body.displayName !== undefined ? { displayName: body.displayName } : {}),
-      ...(body.nickname !== undefined ? { nickname: body.nickname } : {}),
-      ...(body.avatar !== undefined ? { avatar: body.avatar } : {}),
-      ...(body.color !== undefined ? { color: body.color } : {}),
-      ...(body.mentionPatterns !== undefined ? { mentionPatterns: body.mentionPatterns } : {}),
-      ...(body.providerProfileId !== undefined ? { providerProfileId: body.providerProfileId } : {}),
-      ...(body.contextBudget !== undefined ? { contextBudget: body.contextBudget } : {}),
-      ...(body.roleDescription !== undefined ? { roleDescription: body.roleDescription } : {}),
-      ...(body.personality !== undefined ? { personality: body.personality } : {}),
-      ...(body.teamStrengths !== undefined ? { teamStrengths: body.teamStrengths } : {}),
-      ...(body.caution !== undefined ? { caution: body.caution } : {}),
-      ...(body.strengths !== undefined ? { strengths: body.strengths } : {}),
-      ...(body.sessionChain !== undefined ? { sessionChain: body.sessionChain } : {}),
-      ...(body.client !== undefined ? { provider: body.client } : {}),
-      ...(body.defaultModel !== undefined ? { defaultModel: body.defaultModel } : {}),
-      ...(body.mcpSupport !== undefined ? { mcpSupport: body.mcpSupport } : {}),
-      ...(body.commandArgs !== undefined
-        ? {
-            cli: {
-              ...defaultCliForClient('antigravity'),
-              defaultArgs: body.commandArgs,
-            },
-            commandArgs: body.commandArgs,
-          }
-        : {}),
-      ...(body.cli !== undefined ? { cli: body.cli } : {}),
-    });
+    try {
+      updateRuntimeCat(projectRoot, request.params.id, {
+        ...(body.name !== undefined ? { name: body.name } : {}),
+        ...(body.displayName !== undefined ? { displayName: body.displayName } : {}),
+        ...(body.nickname !== undefined ? { nickname: body.nickname } : {}),
+        ...(body.avatar !== undefined ? { avatar: body.avatar } : {}),
+        ...(body.color !== undefined ? { color: body.color } : {}),
+        ...(body.mentionPatterns !== undefined ? { mentionPatterns: body.mentionPatterns } : {}),
+        ...(body.providerProfileId !== undefined ? { providerProfileId: body.providerProfileId } : {}),
+        ...(body.contextBudget !== undefined ? { contextBudget: body.contextBudget } : {}),
+        ...(body.roleDescription !== undefined ? { roleDescription: body.roleDescription } : {}),
+        ...(body.personality !== undefined ? { personality: body.personality } : {}),
+        ...(body.teamStrengths !== undefined ? { teamStrengths: body.teamStrengths } : {}),
+        ...(body.caution !== undefined ? { caution: body.caution } : {}),
+        ...(body.strengths !== undefined ? { strengths: body.strengths } : {}),
+        ...(body.sessionChain !== undefined ? { sessionChain: body.sessionChain } : {}),
+        ...(body.client !== undefined ? { provider: body.client } : {}),
+        ...(body.defaultModel !== undefined ? { defaultModel: body.defaultModel } : {}),
+        ...(body.mcpSupport !== undefined ? { mcpSupport: body.mcpSupport } : {}),
+        ...(body.commandArgs !== undefined
+          ? {
+              cli: {
+                ...defaultCliForClient('antigravity'),
+                defaultArgs: body.commandArgs,
+              },
+              commandArgs: body.commandArgs,
+            }
+          : {}),
+        ...(body.cli !== undefined ? { cli: body.cli } : {}),
+      });
 
-    const resolved = await reconcileCatRegistry(projectRoot, managedIdsBefore, opts.onCatalogChanged);
-    const cat = resolved[request.params.id];
-    const metadata = buildCatResponseMetadataResolver();
-    return { cat: toCatResponse(cat, metadata(cat.id)), updatedBy: operator };
+      const resolved = await reconcileCatRegistry(projectRoot, managedIdsBefore, opts.onCatalogChanged);
+      const cat = resolved[request.params.id];
+      const metadata = buildCatResponseMetadataResolver();
+      return { cat: toCatResponse(cat, metadata(cat.id)), updatedBy: operator };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (/not found/i.test(message)) {
+        reply.status(404);
+      } else {
+        reply.status(400);
+      }
+      return { error: message };
+    }
   });
 
   app.delete<{ Params: { id: string } }>('/api/cats/:id', async (request, reply) => {
