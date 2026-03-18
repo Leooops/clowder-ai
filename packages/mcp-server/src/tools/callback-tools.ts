@@ -677,7 +677,7 @@ export async function handleBootcampEnvCheck(input: { threadId: string }): Promi
   return callbackPost('/api/callbacks/bootcamp-env-check', { threadId: input.threadId });
 }
 
-// ============ Create Thread (F115) ============
+// ============ Create Thread (F128) ============
 
 export const createThreadInputSchema = {
   title: z.string().min(1).max(200).describe('Title for the new thread'),
@@ -851,7 +851,7 @@ export const callbackTools = [
     inputSchema: bootcampEnvCheckInputSchema,
     handler: handleBootcampEnvCheck,
   },
-  // F115: Cat-initiated thread creation
+  // F128: Cat-initiated thread creation
   {
     name: 'cat_cafe_create_thread',
     description:

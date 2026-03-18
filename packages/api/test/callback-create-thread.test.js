@@ -1,5 +1,5 @@
 /**
- * F115: Callback create-thread route tests
+ * F128: Callback create-thread route tests
  * POST /api/callbacks/create-thread
  */
 
@@ -27,7 +27,7 @@ function createMockSocketManager() {
   };
 }
 
-describe('POST /api/callbacks/create-thread (F115)', () => {
+describe('POST /api/callbacks/create-thread (F128)', () => {
   let registry;
   let messageStore;
   let socketManager;
@@ -82,7 +82,7 @@ describe('POST /api/callbacks/create-thread (F115)', () => {
     assert.ok(thread, 'thread should be persisted');
     assert.equal(thread.title, 'Investigate issue #79');
 
-    // F115: Should emit thread_created websocket event to user
+    // F128: Should emit thread_created websocket event to user
     const emits = socketManager.getUserEmits();
     assert.equal(emits.length, 1, 'should emit one thread_created event');
     assert.equal(emits[0].userId, 'user-1');

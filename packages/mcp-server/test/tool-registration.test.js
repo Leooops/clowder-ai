@@ -38,7 +38,7 @@ const EXPECTED_TOOLS = [
   // Bootcamp tools (F087)
   'cat_cafe_update_bootcamp_state',
   'cat_cafe_bootcamp_env_check',
-  // F115: Cat-initiated thread creation
+  // F128: Cat-initiated thread creation
   'cat_cafe_create_thread',
   // Callback-scoped memory tools
   'cat_cafe_search_evidence_callback',
@@ -89,7 +89,7 @@ const EXPECTED_COLLAB_TOOLS = [
   'cat_cafe_start_vote',
   'cat_cafe_update_bootcamp_state',
   'cat_cafe_bootcamp_env_check',
-  // F115: Cat-initiated thread creation
+  // F128: Cat-initiated thread creation
   'cat_cafe_create_thread',
 ];
 
