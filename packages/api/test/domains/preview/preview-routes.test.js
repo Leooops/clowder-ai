@@ -115,6 +115,40 @@ describe('preview routes', () => {
   });
 });
 
+describe('preview routes when gateway is disabled', () => {
+  const app = Fastify();
+
+  before(async () => {
+    await app.register(previewRoutes, { portDiscovery: new PortDiscoveryService(), gatewayPort: 0 });
+    await app.ready();
+  });
+
+  after(async () => {
+    await app.close();
+  });
+
+  it('GET /api/preview/status reports unavailable when gatewayPort=0', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/preview/status' });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.body);
+    assert.equal(body.available, false);
+    assert.equal(body.gatewayPort, 0);
+  });
+
+  it('POST /api/preview/open returns unavailable instead of localhost:0 URL', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/preview/open',
+      payload: { port: 5173, threadId: 'test-thread' },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.body);
+    assert.equal(body.allowed, false);
+    assert.match(body.reason, /preview gateway unavailable/i);
+    assert.equal(body.gatewayUrl, undefined);
+  });
+});
+
 // F120 Phase C: auto-open tests (need socketEmit)
 describe('POST /api/preview/auto-open', () => {
   let app2;

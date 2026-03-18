@@ -323,6 +323,11 @@ export function toAllCatConfigs(config: CatCafeConfig): Record<string, CatConfig
       // R1 fix: null = "explicitly no caution" (don't inherit breed).
       // undefined (omitted) = inherit from breed. ?? treats null as nullish, so use !== undefined.
       const caution = variant.caution !== undefined ? variant.caution : breed.caution;
+      const projectedCommandArgs =
+        variant.commandArgs ??
+        (variant.provider === 'antigravity' && variant.cli?.defaultArgs && variant.cli.defaultArgs.length > 0
+          ? variant.cli.defaultArgs
+          : undefined);
 
       result[catId] = {
         id: createCatId(catId),
@@ -336,7 +341,7 @@ export function toAllCatConfigs(config: CatCafeConfig): Record<string, CatConfig
         provider: variant.provider,
         defaultModel: variant.defaultModel,
         mcpSupport: variant.mcpSupport,
-        ...(variant.commandArgs != null ? { commandArgs: variant.commandArgs } : {}),
+        ...(projectedCommandArgs != null ? { commandArgs: projectedCommandArgs } : {}),
         ...(variant.contextBudget != null ? { contextBudget: variant.contextBudget } : {}),
         roleDescription: variant.roleDescription ?? breed.roleDescription,
         personality: variant.personality ?? defaultVariant?.personality ?? '',

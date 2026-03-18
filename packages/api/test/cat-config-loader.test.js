@@ -747,6 +747,13 @@ describe('F32-b P4c: Sonnet variant in project config', () => {
     assert.ok(all['antig-opus']); // F061: Bengal cat Claude variant
     assert.ok(all.opencode); // F105: OpenCode external agent
   });
+
+  it('projects antigravity commandArgs from cli.defaultArgs when variant.commandArgs is absent', () => {
+    const config = loadCatConfig();
+    const all = toAllCatConfigs(config);
+    assert.deepEqual(all.antigravity.commandArgs, ['.', '--remote-debugging-port=9000']);
+    assert.deepEqual(all['antig-opus'].commandArgs, ['.', '--remote-debugging-port=9000']);
+  });
 });
 
 // --- F-Ground-3 R1 fix: caution null semantics ---
