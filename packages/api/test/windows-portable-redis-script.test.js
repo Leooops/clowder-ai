@@ -453,3 +453,21 @@ test('Windows start.bat delegates to start-windows.ps1', () => {
   assert.match(startBatScript, /powershell/i);
   assert.match(startBatScript, /start-windows\.ps1/);
 });
+
+test('Windows installer generates .env before building so NEXT_PUBLIC_API_URL is baked into the web bundle', () => {
+  const envStepMatch = installScript.match(/Step (\d+)\/\d+ - Generate \.env/);
+  const buildStepMatch = installScript.match(/Step (\d+)\/\d+ - Install dependencies and build/);
+  assert.ok(envStepMatch, 'install.ps1 must have a "Generate .env" step');
+  assert.ok(buildStepMatch, 'install.ps1 must have an "Install dependencies and build" step');
+  assert.ok(Number(envStepMatch[1]) < Number(buildStepMatch[1]),
+    `.env generation (Step ${envStepMatch[1]}) must come before build (Step ${buildStepMatch[1]})`);
+  assert.match(installScript, /SetEnvironmentVariable\(\$key, \$val, "Process"\)/);
+});
+
+test('Windows startup preserves configured REDIS_URL with DB suffix after Redis auto-start', () => {
+  // Need >= 2 matches: "already running" branch + "auto-start" branch
+  const pattern = /if \(\$configuredRedisUrl\) \{\s+\$env:REDIS_URL = \$configuredRedisUrl\s+\} else \{\s+\$env:REDIS_URL = "redis:\/\/localhost:\$RedisPort"\s+\}/g;
+  const matches = startWindowsScript.match(pattern);
+  assert.ok(matches && matches.length >= 2,
+    `Expected REDIS_URL preservation in both already-running and auto-start branches, found ${matches ? matches.length : 0}`);
+});

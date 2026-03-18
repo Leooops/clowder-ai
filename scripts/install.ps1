@@ -5,8 +5,8 @@
 .DESCRIPTION
   Installs prerequisites and sets up the current checked-out clowder-ai repo.
   Clone or download the repo first, then run this helper from inside it.
-  Steps: env detect -> Node/pnpm install -> Redis -> repo-local build -> skills mount
-         -> AI CLI tools -> auth config -> .env -> verify & optionally start
+  Steps: env detect -> Node/pnpm install -> Redis -> .env generate -> deps & build
+         -> skills mount -> AI CLI tools -> auth config -> verify & optionally start
 
 .EXAMPLE
   # From repo root:
@@ -238,10 +238,47 @@ if (-not $hasRedis) {
     exit 1
 }
 
-Write-Step "Step 4/9 - Prepare current repo and build"
+Write-Step "Step 4/9 - Generate .env"
 
 Set-Location $ProjectRoot
 Write-Ok "Using project root: $ProjectRoot"
+
+$envFile = Join-Path $ProjectRoot ".env"
+$envExample = Join-Path $ProjectRoot ".env.example"
+
+if (Test-Path $envFile) {
+    Write-Ok ".env already exists - skipping"
+} elseif (Test-Path $envExample) {
+    Copy-Item $envExample $envFile
+    Write-Ok ".env created from .env.example"
+    Write-Warn "Edit .env to add your API keys and customize ports"
+} else {
+    Write-Warn ".env.example not found - creating minimal .env"
+    @"
+FRONTEND_PORT=3003
+API_SERVER_PORT=3004
+NEXT_PUBLIC_API_URL=http://localhost:3004
+REDIS_PORT=6379
+"@ | Out-File -FilePath $envFile -Encoding utf8
+    Write-Ok "Minimal .env created"
+}
+
+# Load .env into current session so NEXT_PUBLIC_* vars are available at build time
+if (Test-Path $envFile) {
+    foreach ($line in (Get-Content $envFile)) {
+        $trimmed = $line.Trim()
+        if ($trimmed -and -not $trimmed.StartsWith("#") -and $trimmed -match '^([^=]+)=(.*)$') {
+            $key = $Matches[1].Trim()
+            $val = $Matches[2].Trim()
+            if (-not [System.Environment]::GetEnvironmentVariable($key)) {
+                [System.Environment]::SetEnvironmentVariable($key, $val, "Process")
+            }
+        }
+    }
+    Write-Ok ".env loaded into session"
+}
+
+Write-Step "Step 5/9 - Install dependencies and build"
 
 Write-Host "  Running pnpm install..."
 $frozenInstallOk = $false
@@ -279,10 +316,10 @@ if (-not $SkipBuild) {
     Write-Warn "Build skipped (-SkipBuild)"
 }
 
-Write-Step "Step 5/9 - Skills mount"
+Write-Step "Step 6/9 - Skills mount"
 Mount-InstallerSkills -ProjectRoot $ProjectRoot
 
-Write-Step "Step 6/9 - AI CLI tools"
+Write-Step "Step 7/9 - AI CLI tools"
 
 $cliTools = @(
     @{ Name = "Claude"; Label = "Claude"; Cmd = "claude"; Pkg = "@anthropic-ai/claude-code" },
@@ -323,30 +360,8 @@ if (-not $SkipCli) {
     Write-Warn "CLI tools install skipped (-SkipCli)"
 }
 
-Write-Step "Step 7/9 - Auth config"
+Write-Step "Step 8/9 - Auth config"
 Configure-InstallerAuth -ProjectRoot $ProjectRoot -State $authState
-
-Write-Step "Step 8/9 - Generate .env"
-
-$envFile = Join-Path $ProjectRoot ".env"
-$envExample = Join-Path $ProjectRoot ".env.example"
-
-if (Test-Path $envFile) {
-    Write-Ok ".env already exists - skipping"
-} elseif (Test-Path $envExample) {
-    Copy-Item $envExample $envFile
-    Write-Ok ".env created from .env.example"
-    Write-Warn "Edit .env to add your API keys and customize ports"
-} else {
-    Write-Warn ".env.example not found - creating minimal .env"
-    @"
-FRONTEND_PORT=3003
-API_SERVER_PORT=3004
-NEXT_PUBLIC_API_URL=http://localhost:3004
-REDIS_PORT=6379
-"@ | Out-File -FilePath $envFile -Encoding utf8
-    Write-Ok "Minimal .env created"
-}
 
 Apply-InstallerAuthEnv -State $authState -EnvFile $envFile
 

@@ -207,7 +207,11 @@ if ($useExternalRedis) {
                 $redisPing = & $redisCliPath -p $RedisPort ping 2>$null
                 if ($redisPing -eq "PONG") {
                     Write-Ok "Redis started on port $RedisPort"
-                    $env:REDIS_URL = "redis://localhost:$RedisPort"
+                    if ($configuredRedisUrl) {
+                        $env:REDIS_URL = $configuredRedisUrl
+                    } else {
+                        $env:REDIS_URL = "redis://localhost:$RedisPort"
+                    }
                     $startedRedis = $true
                 } else {
                     Write-Warn "Redis start failed - falling back to memory storage"
