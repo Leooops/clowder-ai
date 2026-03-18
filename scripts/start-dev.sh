@@ -70,11 +70,38 @@ done
 
 # 加载环境变量 (放最前面，后续函数需要端口号)
 # 默认读取 .env；.env.local 仅用于 DARE 相关白名单键，避免全量覆盖引发配置漂移。
+CLI_FRONTEND_PORT_OVERRIDE="${FRONTEND_PORT-}"
+CLI_API_SERVER_PORT_OVERRIDE="${API_SERVER_PORT-}"
+CLI_REDIS_PORT_OVERRIDE="${REDIS_PORT-}"
+CLI_REDIS_DATA_DIR_OVERRIDE="${REDIS_DATA_DIR-}"
+CLI_REDIS_BACKUP_DIR_OVERRIDE="${REDIS_BACKUP_DIR-}"
+CLI_ANTHROPIC_PROXY_PORT_OVERRIDE="${ANTHROPIC_PROXY_PORT-}"
+CLI_WHISPER_PORT_OVERRIDE="${WHISPER_PORT-}"
+CLI_TTS_PORT_OVERRIDE="${TTS_PORT-}"
+CLI_LLM_POSTPROCESS_PORT_OVERRIDE="${LLM_POSTPROCESS_PORT-}"
+
 if [ -f .env ]; then
     set -a
     source .env
     set +a
 fi
+
+restore_cli_override() {
+    local name="$1"
+    local value="$2"
+    [ -n "$value" ] || return 0
+    export "$name=$value"
+}
+
+restore_cli_override "FRONTEND_PORT" "$CLI_FRONTEND_PORT_OVERRIDE"
+restore_cli_override "API_SERVER_PORT" "$CLI_API_SERVER_PORT_OVERRIDE"
+restore_cli_override "REDIS_PORT" "$CLI_REDIS_PORT_OVERRIDE"
+restore_cli_override "REDIS_DATA_DIR" "$CLI_REDIS_DATA_DIR_OVERRIDE"
+restore_cli_override "REDIS_BACKUP_DIR" "$CLI_REDIS_BACKUP_DIR_OVERRIDE"
+restore_cli_override "ANTHROPIC_PROXY_PORT" "$CLI_ANTHROPIC_PROXY_PORT_OVERRIDE"
+restore_cli_override "WHISPER_PORT" "$CLI_WHISPER_PORT_OVERRIDE"
+restore_cli_override "TTS_PORT" "$CLI_TTS_PORT_OVERRIDE"
+restore_cli_override "LLM_POSTPROCESS_PORT" "$CLI_LLM_POSTPROCESS_PORT_OVERRIDE"
 
 load_dare_env_from_local() {
     local env_file=".env.local"
@@ -230,8 +257,21 @@ default_redis_backup_dir() {
 }
 
 REDIS_STORAGE_KEY=$(default_redis_storage_key "$REDIS_PROFILE" "$REDIS_PORT")
-REDIS_DATA_DIR=${REDIS_DATA_DIR:-"$(default_redis_data_dir "$REDIS_PROFILE" "$REDIS_PORT")"}
-REDIS_BACKUP_DIR=${REDIS_BACKUP_DIR:-"$(default_redis_backup_dir "$REDIS_PROFILE" "$REDIS_PORT")"}
+if [ -n "$CLI_REDIS_DATA_DIR_OVERRIDE" ]; then
+    REDIS_DATA_DIR="$CLI_REDIS_DATA_DIR_OVERRIDE"
+elif [ -n "$CLI_REDIS_PORT_OVERRIDE" ]; then
+    REDIS_DATA_DIR="$(default_redis_data_dir "$REDIS_PROFILE" "$REDIS_PORT")"
+else
+    REDIS_DATA_DIR=${REDIS_DATA_DIR:-"$(default_redis_data_dir "$REDIS_PROFILE" "$REDIS_PORT")"}
+fi
+
+if [ -n "$CLI_REDIS_BACKUP_DIR_OVERRIDE" ]; then
+    REDIS_BACKUP_DIR="$CLI_REDIS_BACKUP_DIR_OVERRIDE"
+elif [ -n "$CLI_REDIS_PORT_OVERRIDE" ]; then
+    REDIS_BACKUP_DIR="$(default_redis_backup_dir "$REDIS_PROFILE" "$REDIS_PORT")"
+else
+    REDIS_BACKUP_DIR=${REDIS_BACKUP_DIR:-"$(default_redis_backup_dir "$REDIS_PROFILE" "$REDIS_PORT")"}
+fi
 REDIS_DBFILE=${REDIS_DBFILE:-dump.rdb}
 REDIS_PIDFILE="${REDIS_DATA_DIR}/redis-${REDIS_PORT}.pid"
 REDIS_LOGFILE="${REDIS_DATA_DIR}/redis-${REDIS_PORT}.log"
@@ -275,6 +315,32 @@ wait_for_port() {
         sleep 1
         elapsed=$((elapsed + 1))
     done
+    echo -e "${RED}  ✗ $name 启动超时（端口 $port, ${max_wait}s 内未监听）${NC}"
+    return 1
+}
+
+wait_for_port_or_exit() {
+    local port=$1
+    local name=$2
+    local pid=$3
+    local max_wait=${4:-15}
+    local elapsed=0
+
+    while [ $elapsed -lt $max_wait ]; do
+        if lsof -nP -i ":$port" -sTCP:LISTEN >/dev/null 2>&1; then
+            echo -e "${GREEN}  ✓ $name 已启动 (端口 $port, ${elapsed}s)${NC}"
+            return 0
+        fi
+
+        if ! kill -0 "$pid" 2>/dev/null; then
+            echo -e "${RED}  ✗ $name 启动失败（进程已退出，端口 $port 未监听）${NC}"
+            return 1
+        fi
+
+        sleep 1
+        elapsed=$((elapsed + 1))
+    done
+
     echo -e "${RED}  ✗ $name 启动超时（端口 $port, ${max_wait}s 内未监听）${NC}"
     return 1
 }
@@ -702,10 +768,17 @@ main() {
         fi
     fi
 
+    API_LAUNCH_CMD="cd packages/api && pnpm run dev"
+    if [ "${CAT_CAFE_DIRECT_NO_WATCH:-0}" = "1" ]; then
+        echo -e "${YELLOW}  ⚠ API 使用非 watch 模式 (CAT_CAFE_DIRECT_NO_WATCH=1)${NC}"
+        API_LAUNCH_CMD="cd packages/api && pnpm run start"
+    fi
+
     # API Server
     echo "  启动 API Server (端口 $API_PORT)..."
-    background_eval_with_null_stdin "cd packages/api && pnpm run dev"
-    sleep 2
+    background_eval_with_null_stdin "$API_LAUNCH_CMD"
+    API_PID=$!
+    wait_for_port_or_exit "$API_PORT" "API Server" "$API_PID" 20 || exit 1
 
     # Frontend
     if [ "$PROD_WEB" = true ]; then
@@ -723,7 +796,8 @@ main() {
         echo "  启动 Frontend (端口 $WEB_PORT, dev)..."
         background_eval_with_null_stdin "cd packages/web && NEXT_IGNORE_INCORRECT_LOCKFILE=1 PORT=$WEB_PORT pnpm exec next dev -p $WEB_PORT"
     fi
-    sleep 3
+    WEB_PID=$!
+    wait_for_port_or_exit "$WEB_PORT" "Frontend" "$WEB_PID" 30 || exit 1
 
     # 显示存储模式
     if [ -n "$REDIS_URL" ]; then

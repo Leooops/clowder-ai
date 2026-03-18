@@ -24,6 +24,7 @@ test('source-only exposes helper functions for testing seams', () => {
     `
 declare -F configure_mcp_server_path >/dev/null
 declare -F background_eval_with_null_stdin >/dev/null
+declare -F wait_for_port_or_exit >/dev/null
 declare -F default_redis_storage_key >/dev/null
 declare -F default_redis_data_dir >/dev/null
 declare -F default_redis_backup_dir >/dev/null
@@ -121,6 +122,54 @@ printf '%s|%s|%s|%s' "$DARE_API_KEY" "$DARE_ENDPOINT" "$ANTHROPIC_API_KEY" "$ANT
   assert.equal(output, 'sk-dare-local|https://dare-proxy.example/v1|sk-ant-local|https://anthropic-proxy.example');
 });
 
+test('explicit port env vars override .env values for direct startup', () => {
+  const scriptPath = resolve(process.cwd(), '../../scripts/start-dev.sh');
+  const result = spawnSync(
+    'bash',
+    ['-lc', `set -e\nsource "${scriptPath}" --source-only >/dev/null 2>&1\ntrap - EXIT INT TERM\nprintf '%s|%s|%s' "$FRONTEND_PORT" "$API_SERVER_PORT" "$REDIS_PORT"`],
+    {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        FRONTEND_PORT: '3023',
+        API_SERVER_PORT: '3024',
+        REDIS_PORT: '6409',
+      },
+    },
+  );
+
+  assert.equal(result.status, 0, `snippet failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+  assert.equal(result.stdout.trim(), '3023|3024|6409');
+});
+
+test('redis port override also recomputes isolated redis dirs', () => {
+  const scriptPath = resolve(process.cwd(), '../../scripts/start-dev.sh');
+  const tempHome = mkdtempSync(join(tmpdir(), 'cat-cafe-start-dev-redis-override-'));
+
+  try {
+    const result = spawnSync(
+      'bash',
+      ['-lc', `set -e\nsource "${scriptPath}" --source-only >/dev/null 2>&1\ntrap - EXIT INT TERM\nprintf '%s|%s|%s' "$REDIS_STORAGE_KEY" "$REDIS_DATA_DIR" "$REDIS_BACKUP_DIR"`],
+      {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          HOME: tempHome,
+          REDIS_PORT: '6409',
+        },
+      },
+    );
+
+    assert.equal(result.status, 0, `snippet failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+    assert.equal(
+      result.stdout.trim(),
+      ['dev-6409', `${tempHome}/.cat-cafe/redis-dev-6409`, `${tempHome}/.cat-cafe/redis-backups/dev-6409`].join('|'),
+    );
+  } finally {
+    rmSync(tempHome, { recursive: true, force: true });
+  }
+});
+
 test('manual mirror args map to npm, pip, and HuggingFace environment overrides', () => {
   const scriptPath = resolve(process.cwd(), '../../scripts/start-dev.sh');
   const output = runSourceOnlySnippet(
@@ -173,6 +222,24 @@ wait "$pid"
   );
 
   assert.match(output, /n\/dev\/null/);
+});
+
+test('wait_for_port_or_exit fails fast when background process exits before binding', () => {
+  const scriptPath = resolve(process.cwd(), '../../scripts/start-dev.sh');
+  const output = runSourceOnlySnippet(
+    scriptPath,
+    `
+background_eval_with_null_stdin "exit 0"
+pid=$!
+if wait_for_port_or_exit 65534 "test-service" "$pid" 2 >/dev/null; then
+  printf 'unexpected-success'
+else
+  printf 'failed-fast'
+fi
+`,
+  );
+
+  assert.equal(output, 'failed-fast');
 });
 
 test('custom Redis port gets isolated default data and backup dirs', () => {

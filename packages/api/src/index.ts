@@ -395,15 +395,20 @@ async function main(): Promise<void> {
   const agentPaneRegistry = tmuxGateway ? new AgentPaneRegistry() : undefined;
 
   // F120: Preview Gateway (独立端口反向代理) + Port Discovery
+  const PREVIEW_GATEWAY_ENABLED = process.env.PREVIEW_GATEWAY_ENABLED !== '0';
   const PREVIEW_GATEWAY_PORT = Number.parseInt(process.env.PREVIEW_GATEWAY_PORT ?? '4100', 10);
   const runtimePorts = collectRuntimePorts();
   const previewGateway = new PreviewGateway({ port: PREVIEW_GATEWAY_PORT, runtimePorts });
   const portDiscovery = new PortDiscoveryService();
-  try {
-    await previewGateway.start();
-    app.log.info(`[preview] Gateway started on port ${previewGateway.actualPort}`);
-  } catch (err) {
-    app.log.warn(`[preview] Gateway failed to start: ${(err as Error).message}`);
+  if (PREVIEW_GATEWAY_ENABLED) {
+    try {
+      await previewGateway.start();
+      app.log.info(`[preview] Gateway started on port ${previewGateway.actualPort}`);
+    } catch (err) {
+      app.log.warn(`[preview] Gateway failed to start: ${(err as Error).message}`);
+    }
+  } else {
+    app.log.info('[preview] Gateway disabled (PREVIEW_GATEWAY_ENABLED=0)');
   }
   // Port discovery → Socket.IO push to worktree-scoped room
   portDiscovery.onDiscovered((port) => {
@@ -619,7 +624,7 @@ async function main(): Promise<void> {
   });
   await app.register(previewRoutes, {
     portDiscovery,
-    gatewayPort: previewGateway.actualPort || PREVIEW_GATEWAY_PORT,
+    gatewayPort: PREVIEW_GATEWAY_ENABLED ? (previewGateway.actualPort || PREVIEW_GATEWAY_PORT) : 0,
     runtimePorts,
     socketEmit: (event, data, room) => {
       socketManager?.broadcastToRoom(room, event, data);
