@@ -317,6 +317,23 @@ describe('cat-config-loader', () => {
       assert.equal(isSessionChainEnabled('unknown-cat', config), true);
     });
 
+    it('prefers variant.sessionChain override over breed-level setting', () => {
+      const cfg = validConfig();
+      cfg.breeds[0].features = { sessionChain: true };
+      cfg.breeds[0].variants.push({
+        id: 'opus-sonnet',
+        catId: 'opus-sonnet',
+        provider: 'anthropic',
+        defaultModel: 'claude-sonnet-4-5-20250929',
+        mcpSupport: true,
+        cli: { command: 'claude', outputFormat: 'stream-json' },
+        sessionChain: false,
+      });
+      const config = loadCatConfig(writeTempConfig(cfg));
+      assert.equal(isSessionChainEnabled('opus', config), true);
+      assert.equal(isSessionChainEnabled('opus-sonnet', config), false);
+    });
+
     it('F053: loads project config for gemini (sessionChain: true after parity fix)', () => {
       // Uses the actual project cat-config.json
       const config = loadCatConfig();

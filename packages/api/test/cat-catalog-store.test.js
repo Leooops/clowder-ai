@@ -174,6 +174,35 @@ describe('cat-catalog-store', () => {
     assert.equal(defaultVariant.sessionChain, undefined);
   });
 
+  it('keeps roleDescription updates scoped to non-default variants', async () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), 'cat-catalog-store-'));
+    const templatePath = join(projectRoot, 'cat-template.json');
+    const template = validConfig();
+    template.breeds[0].variants.push({
+      id: 'opus-sonnet',
+      catId: 'opus-sonnet',
+      provider: 'anthropic',
+      defaultModel: 'claude-sonnet-4-5-20250929',
+      mcpSupport: true,
+      cli: { command: 'claude', outputFormat: 'stream-json' },
+    });
+    writeFileSync(templatePath, JSON.stringify(template, null, 2));
+    bootstrapCatCatalog(projectRoot, templatePath);
+
+    await updateRuntimeCat(projectRoot, 'opus-sonnet', { roleDescription: '副手架构师' });
+
+    const catalog = readRuntimeCatCatalog(projectRoot);
+    const breed = catalog.breeds.find((item) => item.id === 'ragdoll');
+    assert.ok(breed, 'ragdoll breed should still exist');
+    assert.equal(breed.roleDescription, '主架构师');
+    const sonnetVariant = breed.variants.find((variant) => variant.id === 'opus-sonnet');
+    assert.ok(sonnetVariant, 'opus-sonnet variant should still exist');
+    assert.equal(sonnetVariant.roleDescription, '副手架构师');
+    const defaultVariant = breed.variants.find((variant) => variant.id === 'opus-default');
+    assert.ok(defaultVariant, 'opus-default variant should still exist');
+    assert.equal(defaultVariant.roleDescription, undefined);
+  });
+
   it('does not overwrite runtime catalog when validation fails', () => {
     const projectRoot = mkdtempSync(join(tmpdir(), 'cat-catalog-store-'));
     const templatePath = join(projectRoot, 'cat-template.json');

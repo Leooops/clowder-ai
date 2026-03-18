@@ -242,7 +242,14 @@ export function updateRuntimeCat(projectRoot: string, catId: string, patch: Runt
       delete breed.nickname;
     }
   }
-  if (patch.roleDescription !== undefined) breed.roleDescription = patch.roleDescription;
+  if (patch.roleDescription !== undefined) {
+    if (located.isDefaultVariant) {
+      breed.roleDescription = patch.roleDescription;
+      delete variant.roleDescription;
+    } else {
+      variant.roleDescription = patch.roleDescription;
+    }
+  }
 
   if (patch.displayName !== undefined) {
     if (located.isDefaultVariant) {

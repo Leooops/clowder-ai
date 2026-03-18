@@ -279,6 +279,47 @@ describe('cats routes runtime CRUD', { concurrency: false }, () => {
     assert.equal(statusBody.id, 'runtime-antigravity');
   });
 
+  it('POST /api/cats defaults mcpSupport=true for Codex/Gemini clients when omitted', async () => {
+    const projectRoot = createProjectRoot();
+    process.env.CAT_TEMPLATE_PATH = join(projectRoot, 'cat-template.json');
+
+    const Fastify = (await import('fastify')).default;
+    const { catsRoutes } = await import('../dist/routes/cats.js');
+
+    const app = Fastify();
+    await app.register(catsRoutes);
+
+    for (const spec of [
+      { catId: 'runtime-openai', client: 'openai', model: 'gpt-5.4-mini' },
+      { catId: 'runtime-gemini', client: 'google', model: 'gemini-2.5-pro' },
+    ]) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/cats',
+        headers: {
+          'content-type': 'application/json',
+          'x-cat-cafe-user': 'codex',
+        },
+        body: JSON.stringify({
+          catId: spec.catId,
+          name: `${spec.catId}-name`,
+          displayName: `${spec.catId}-display`,
+          avatar: '/avatars/runtime.png',
+          color: { primary: '#334155', secondary: '#cbd5e1' },
+          mentionPatterns: [`@${spec.catId}`],
+          roleDescription: 'runtime',
+          client: spec.client,
+          defaultModel: spec.model,
+        }),
+      });
+
+      assert.equal(res.statusCode, 201);
+      const body = JSON.parse(res.body);
+      assert.equal(body.cat.id, spec.catId);
+      assert.equal(body.cat.mcpSupport, true);
+    }
+  });
+
   it('PATCH /api/cats/:id rejects provider bindings incompatible with client protocol', async () => {
     const projectRoot = createProjectRoot();
     process.env.CAT_TEMPLATE_PATH = join(projectRoot, 'cat-template.json');

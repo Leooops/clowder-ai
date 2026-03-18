@@ -364,7 +364,12 @@ export const catsRoutes: FastifyPluginAsync<CatsRoutesOptions> = async (app, opt
           sessionChain: body.sessionChain,
           provider: body.client,
           defaultModel: body.defaultModel,
-          mcpSupport: body.mcpSupport ?? body.client === 'anthropic',
+          mcpSupport:
+            body.mcpSupport ??
+            (body.client === 'anthropic' ||
+              body.client === 'openai' ||
+              body.client === 'google' ||
+              body.client === 'opencode'),
           cli: body.cli ?? defaultCliForClient(body.client),
         });
       }

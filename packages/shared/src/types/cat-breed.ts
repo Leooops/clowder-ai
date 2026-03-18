@@ -61,6 +61,8 @@ export interface CatVariant {
   readonly cli: CliConfig;
   /** F127: explicit CLI args for bridge-style members such as Antigravity. */
   readonly commandArgs?: readonly string[];
+  /** Optional per-variant override for roleDescription; falls back to breed.roleDescription. */
+  readonly roleDescription?: string;
   readonly personality?: string;
   readonly strengths?: readonly string[];
   /** F32-b P4c: Override breed-level avatar for this variant */

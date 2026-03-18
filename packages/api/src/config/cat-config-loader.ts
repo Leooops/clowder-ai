@@ -63,6 +63,7 @@ const catVariantSchema = z.object({
   mcpSupport: z.boolean(),
   cli: cliConfigSchema,
   commandArgs: z.array(z.string().min(1)).optional(), // F127: explicit bridge args (e.g. Antigravity)
+  roleDescription: z.string().min(1).optional(), // F127 review fix: allow variant-scoped roleDescription override
   sessionChain: z.boolean().optional(), // F127 review fix: allow variant-scoped sessionChain override
   personality: z.string().optional(),
   strengths: z.array(z.string()).optional(),
@@ -337,7 +338,7 @@ export function toAllCatConfigs(config: CatCafeConfig): Record<string, CatConfig
         mcpSupport: variant.mcpSupport,
         ...(variant.commandArgs != null ? { commandArgs: variant.commandArgs } : {}),
         ...(variant.contextBudget != null ? { contextBudget: variant.contextBudget } : {}),
-        roleDescription: breed.roleDescription,
+        roleDescription: variant.roleDescription ?? breed.roleDescription,
         personality: variant.personality ?? defaultVariant?.personality ?? '',
         breedId: breed.id,
         breedDisplayName: breed.displayName,
@@ -466,16 +467,16 @@ let _catIdToBreedSource: CatCafeConfig | null = null;
 export function isSessionChainEnabled(catId: CatId | string, config?: CatCafeConfig): boolean {
   const cfg = config ?? getCachedConfig();
   if (!cfg) return true; // Config unreadable → default enabled (Cloud P1 fix)
-
-  // Rebuild index if config reference changed (test injection)
-  if (!_catIdToBreed || _catIdToBreedSource !== cfg) {
-    _catIdToBreed = buildCatIdToBreedIndex(cfg);
-    _catIdToBreedSource = cfg;
+  const id = catId as string;
+  for (const breed of cfg.breeds) {
+    for (const variant of breed.variants) {
+      const resolvedCatId = variant.catId ?? breed.catId;
+      if (resolvedCatId !== id) continue;
+      if (variant.sessionChain !== undefined) return variant.sessionChain;
+      return breed.features?.sessionChain !== false;
+    }
   }
-
-  const breed = _catIdToBreed.get(catId as string);
-  if (!breed) return true; // Unknown cat → default enabled
-  return breed.features?.sessionChain !== false;
+  return true; // Unknown cat → default enabled
 }
 
 // ── F33 Phase 2: Session Strategy from config ─────────────────────────
