@@ -146,6 +146,24 @@ describe('POST /api/callbacks/create-thread (F128)', () => {
     assert.equal(response.statusCode, 400);
   });
 
+  // P2 fix: whitespace-only title should be rejected after trim
+  test('returns 400 for whitespace-only title', async () => {
+    const app = await createApp();
+    const { invocationId, callbackToken } = registry.create('user-1', 'opus');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/callbacks/create-thread',
+      payload: {
+        invocationId,
+        callbackToken,
+        title: '   ',
+      },
+    });
+
+    assert.equal(response.statusCode, 400, 'whitespace-only title should fail validation');
+  });
+
   // P2 fix: inherits projectPath from invoking thread
   test('inherits projectPath from source thread', async () => {
     const app = await createApp();

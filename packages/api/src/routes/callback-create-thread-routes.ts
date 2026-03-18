@@ -14,7 +14,7 @@ import { callbackAuthSchema } from './callback-auth-schema.js';
 import { EXPIRED_CREDENTIALS_ERROR } from './callback-errors.js';
 
 const createThreadCallbackSchema = callbackAuthSchema.extend({
-  title: z.string().min(1).max(200),
+  title: z.string().trim().min(1).max(200),
   preferredCats: z.array(catIdSchema()).max(10).optional(),
 });
 
