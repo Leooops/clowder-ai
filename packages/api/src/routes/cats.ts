@@ -12,6 +12,7 @@ import { z } from 'zod';
 import { getRoster, loadCatConfig, toAllCatConfigs } from '../config/cat-config-loader.js';
 import { readProviderProfiles } from '../config/provider-profiles.js';
 import { createRuntimeCat, deleteRuntimeCat, updateRuntimeCat } from '../config/runtime-cat-catalog.js';
+import { deleteRuntimeOverride } from '../config/session-strategy-overrides.js';
 
 const DEFAULT_TEMPLATE_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../cat-template.json');
 
@@ -482,6 +483,7 @@ export const catsRoutes: FastifyPluginAsync<CatsRoutesOptions> = async (app, opt
     const managedIdsBefore = getManagedCatalogIds(projectRoot);
     try {
       deleteRuntimeCat(projectRoot, request.params.id);
+      await deleteRuntimeOverride(request.params.id);
       await reconcileCatRegistry(projectRoot, managedIdsBefore, opts.onCatalogChanged);
       return { deleted: true, id: request.params.id, updatedBy: operator };
     } catch (err) {

@@ -146,6 +146,10 @@ function protocolForClient(client: ClientValue): 'anthropic' | 'openai' | 'googl
   }
 }
 
+function defaultMcpSupportForClient(client: ClientValue): boolean {
+  return client === 'anthropic' || client === 'openai' || client === 'google' || client === 'opencode';
+}
+
 export function filterProfiles(client: ClientValue, profiles: ProfileItem[]): ProfileItem[] {
   if (client === 'antigravity') return [];
   const protocol = protocolForClient(client);
@@ -304,6 +308,8 @@ export function buildCatPayload(form: HubCatEditorFormState, cat?: CatData | nul
       : cat?.providerProfileId
         ? { providerProfileId: null as null }
         : {};
+  const mcpSupportPatch =
+    cat && form.client !== cat.provider ? { mcpSupport: defaultMcpSupportForClient(form.client) } : {};
   const common = {
     displayName,
     nickname: trimText(form.nickname),
@@ -335,6 +341,7 @@ export function buildCatPayload(form: HubCatEditorFormState, cat?: CatData | nul
       ...(cat ? {} : { catId: trimText(form.catId), name: createName }),
       client: 'antigravity' as const,
       ...providerProfilePatch,
+      ...mcpSupportPatch,
       defaultModel: trimText(form.defaultModel),
       commandArgs: splitCommandArgs(form.commandArgs),
     };
@@ -345,6 +352,7 @@ export function buildCatPayload(form: HubCatEditorFormState, cat?: CatData | nul
     ...(cat ? {} : { catId: trimText(form.catId), name: createName }),
     client: form.client,
     ...providerProfilePatch,
+    ...mcpSupportPatch,
     defaultModel: trimText(form.defaultModel),
   };
 }

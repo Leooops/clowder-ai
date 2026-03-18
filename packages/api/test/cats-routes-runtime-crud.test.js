@@ -6,6 +6,9 @@ import { after, afterEach, beforeEach, describe, it } from 'node:test';
 import { CAT_CONFIGS, catRegistry, createCatId } from '@cat-cafe/shared';
 
 const { parseA2AMentions } = await import('../dist/domains/cats/services/agents/routing/a2a-mentions.js');
+const { _clearRuntimeOverrides, getRuntimeOverride, setRuntimeOverride } = await import(
+  '../dist/config/session-strategy-overrides.js'
+);
 
 const tempDirs = [];
 let savedTemplatePath;
@@ -76,6 +79,7 @@ describe('cats routes runtime CRUD', { concurrency: false }, () => {
   beforeEach(() => {
     savedTemplatePath = process.env.CAT_TEMPLATE_PATH;
     resetRegistryToBuiltins();
+    _clearRuntimeOverrides();
   });
 
   afterEach(() => {
@@ -85,6 +89,7 @@ describe('cats routes runtime CRUD', { concurrency: false }, () => {
       process.env.CAT_TEMPLATE_PATH = savedTemplatePath;
     }
     resetRegistryToBuiltins();
+    _clearRuntimeOverrides();
   });
 
   after(() => {
@@ -447,6 +452,52 @@ describe('cats routes runtime CRUD', { concurrency: false }, () => {
     assert.equal(res.statusCode, 400);
     const body = JSON.parse(res.body);
     assert.match(body.error, /requires an api_key provider profile/i);
+  });
+
+  it('DELETE /api/cats/:id removes runtime session-strategy override for deleted cat', async () => {
+    const projectRoot = createProjectRoot();
+    process.env.CAT_TEMPLATE_PATH = join(projectRoot, 'cat-template.json');
+
+    const Fastify = (await import('fastify')).default;
+    const { catsRoutes } = await import('../dist/routes/cats.js');
+
+    const app = Fastify();
+    await app.register(catsRoutes);
+
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/api/cats',
+      headers: {
+        'content-type': 'application/json',
+        'x-cat-cafe-user': 'codex',
+      },
+      body: JSON.stringify({
+        catId: 'runtime-strategy-cat',
+        name: '策略猫',
+        displayName: '策略猫',
+        avatar: '/avatars/strategy.png',
+        color: { primary: '#155e75', secondary: '#a5f3fc' },
+        mentionPatterns: ['@runtime-strategy-cat'],
+        roleDescription: '策略验证',
+        client: 'openai',
+        defaultModel: 'gpt-5.4-mini',
+      }),
+    });
+    assert.equal(createRes.statusCode, 201);
+
+    await setRuntimeOverride('runtime-strategy-cat', {
+      strategy: 'compress',
+      thresholds: { warn: 0.55, action: 0.8 },
+    });
+    assert.ok(getRuntimeOverride('runtime-strategy-cat'));
+
+    const deleteRes = await app.inject({
+      method: 'DELETE',
+      url: '/api/cats/runtime-strategy-cat',
+      headers: { 'x-cat-cafe-user': 'codex' },
+    });
+    assert.equal(deleteRes.statusCode, 200);
+    assert.equal(getRuntimeOverride('runtime-strategy-cat'), undefined);
   });
 
   it('DELETE /api/cats/:id removes runtime members from subsequent reads', async () => {

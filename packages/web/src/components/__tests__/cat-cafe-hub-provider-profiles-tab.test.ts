@@ -64,6 +64,14 @@ async function flushEffects() {
   });
 }
 
+async function changeField(element: HTMLInputElement | HTMLSelectElement, value: string, eventType: 'input' | 'change' = 'input') {
+  await act(async () => {
+    const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), 'value');
+    descriptor?.set?.call(element, value);
+    element.dispatchEvent(new Event(eventType, { bubbles: true }));
+  });
+}
+
 function queryButton(container: HTMLElement, text: string): HTMLButtonElement {
   const button = Array.from(container.querySelectorAll('button')).find((candidate) => candidate.textContent?.includes(text));
   if (!button) {
@@ -196,7 +204,7 @@ describe('CatCafeHub provider profiles tab', () => {
     expect(mockApiFetch).not.toHaveBeenCalledWith('/api/claude-rescue/sessions');
   });
 
-  it('keeps API key creation collapsed by default and removes redundant protocol fields', async () => {
+  it('keeps API key creation collapsed by default and shows protocol controls on expand', async () => {
     mockApiFetch.mockImplementation((path: string) => {
       if (path.startsWith('/api/provider-profiles')) {
         return Promise.resolve(
@@ -280,9 +288,10 @@ describe('CatCafeHub provider profiles tab', () => {
     expect(container.textContent).toContain('Gemini');
     expect(container.textContent).toContain('API Key');
     expect(container.textContent).toContain('+ 新建 API Key 账号');
-    expect(container.textContent).not.toContain('协议自动识别');
+    expect(container.textContent).not.toContain('协议建议：');
     expect(container.textContent).not.toContain('默认/覆盖模型');
     expect(container.querySelector('input[placeholder="Base URL"]')).toBeNull();
+    expect(container.querySelector('select[aria-label="Protocol"]')).toBeNull();
 
     const profileList = container.querySelector('[aria-label="Provider Profile List"]');
     expect(profileList?.textContent).not.toContain('Antigravity');
@@ -292,11 +301,87 @@ describe('CatCafeHub provider profiles tab', () => {
     });
     await flushEffects();
 
-    expect(container.textContent).toContain('协议自动识别');
+    expect(container.textContent).toContain('协议建议：');
     expect(container.querySelector('input[placeholder="Base URL"]')).toBeTruthy();
     expect(container.querySelector('input[placeholder="API Key"]')).toBeTruthy();
-    expect(container.querySelector('select')).toBeNull();
+    expect(container.querySelector('select[aria-label="Protocol"]')).toBeTruthy();
     expect(container.textContent).toContain('可用模型');
+  });
+
+  it('creates api-key profile with the manually selected protocol', async () => {
+    mockApiFetch.mockImplementation((path: string, init?: RequestInit) => {
+      if (path === '/api/provider-profiles' && init?.method === 'POST') {
+        return Promise.resolve(
+          jsonResponse({
+            provider: {
+              id: 'vendor-profile',
+              displayName: 'Vendor Profile',
+            },
+          }),
+        );
+      }
+      if (path.startsWith('/api/provider-profiles')) {
+        return Promise.resolve(
+          jsonResponse({
+            projectPath: '/tmp/project',
+            activeProfileId: 'claude-oauth',
+            providers: [
+              {
+                id: 'claude-oauth',
+                provider: 'claude-oauth',
+                displayName: 'Claude (OAuth)',
+                name: 'Claude (OAuth)',
+                authType: 'oauth',
+                protocol: 'anthropic',
+                builtin: true,
+                mode: 'subscription',
+                models: ['claude-opus-4-6'],
+                hasApiKey: false,
+                createdAt: '2026-03-18T00:00:00.000Z',
+                updatedAt: '2026-03-18T00:00:00.000Z',
+              },
+            ],
+          }),
+        );
+      }
+      throw new Error(`Unexpected apiFetch path: ${path}`);
+    });
+
+    await act(async () => {
+      root.render(React.createElement(HubProviderProfilesTab));
+    });
+    await flushEffects();
+
+    await act(async () => {
+      queryButton(container, '+ 新建 API Key 账号').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushEffects();
+
+    const displayNameInput = container.querySelector('input[placeholder="账号显示名（例如 my-glm）"]') as HTMLInputElement;
+    const baseUrlInput = container.querySelector('input[placeholder="Base URL"]') as HTMLInputElement;
+    const apiKeyInput = container.querySelector('input[placeholder="API Key"]') as HTMLInputElement;
+    const protocolSelect = container.querySelector('select[aria-label="Protocol"]') as HTMLSelectElement;
+    const createButton = queryButton(container, '创建并激活');
+
+    await changeField(displayNameInput, 'Sponsor Gemini');
+    await changeField(baseUrlInput, 'https://llm.sponsor.example/v1');
+    await changeField(apiKeyInput, 'sk-test');
+    await changeField(protocolSelect, 'google', 'change');
+    await flushEffects();
+
+    await act(async () => {
+      createButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushEffects();
+
+    const postCall = mockApiFetch.mock.calls.find(
+      ([path, init]) => path === '/api/provider-profiles' && init?.method?.toUpperCase() === 'POST',
+    );
+    expect(postCall).toBeTruthy();
+    const payload = JSON.parse(String(postCall?.[1]?.body));
+    expect(payload.displayName).toBe('Sponsor Gemini');
+    expect(payload.baseUrl).toBe('https://llm.sponsor.example/v1');
+    expect(payload.protocol).toBe('google');
   });
 
   it('filters provider cards with the wireframe tabs', async () => {

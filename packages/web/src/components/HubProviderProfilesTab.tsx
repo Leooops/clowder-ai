@@ -6,12 +6,12 @@ import { apiFetch } from '@/utils/api-client';
 import { HubProviderProfileItem, type ProfileEditPayload } from './HubProviderProfileItem';
 import {
   CreateApiKeyProfileSection,
-  inferProfileProtocol,
   ProviderFilterTabs,
   ProviderProfilesSummaryCard,
   type ProviderFilterKey,
 } from './hub-provider-profiles.sections';
 import type {
+  ProfileProtocol,
   ProfileTestResult,
   ProviderProfilesResponse,
 } from './hub-provider-profiles.types';
@@ -30,6 +30,7 @@ export function HubProviderProfilesTab() {
   const [filter, setFilter] = useState<ProviderFilterKey>('all');
 
   const [createDisplayName, setCreateDisplayName] = useState('');
+  const [createProtocol, setCreateProtocol] = useState<ProfileProtocol>('openai');
   const [createBaseUrl, setCreateBaseUrl] = useState('');
   const [createApiKey, setCreateApiKey] = useState('');
   const [createModels, setCreateModels] = useState<string[]>([]);
@@ -104,7 +105,7 @@ export function HubProviderProfilesTab() {
           projectPath: projectPath ?? undefined,
           displayName: createDisplayName.trim(),
           authType: 'api_key',
-          protocol: inferProfileProtocol(createBaseUrl),
+          protocol: createProtocol,
           baseUrl: createBaseUrl.trim(),
           apiKey: createApiKey.trim(),
           ...(createModels.length > 0 ? { models: createModels } : {}),
@@ -112,6 +113,7 @@ export function HubProviderProfilesTab() {
         }),
       });
       setCreateDisplayName('');
+      setCreateProtocol('openai');
       setCreateBaseUrl('');
       setCreateApiKey('');
       setCreateModels([]);
@@ -127,6 +129,7 @@ export function HubProviderProfilesTab() {
     createBaseUrl,
     createDisplayName,
     createModels,
+    createProtocol,
     projectPath,
     refresh,
   ]);
@@ -311,11 +314,13 @@ export function HubProviderProfilesTab() {
 
       <CreateApiKeyProfileSection
         displayName={createDisplayName}
+        protocol={createProtocol}
         baseUrl={createBaseUrl}
         apiKey={createApiKey}
         models={createModels}
         busy={busyId === 'create'}
         onDisplayNameChange={setCreateDisplayName}
+        onProtocolChange={setCreateProtocol}
         onBaseUrlChange={setCreateBaseUrl}
         onApiKeyChange={setCreateApiKey}
         onModelsChange={setCreateModels}

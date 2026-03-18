@@ -14,6 +14,12 @@ const FILTER_OPTIONS: Array<{ key: ProviderFilterKey; label: string }> = [
   { key: 'api_key', label: 'API Key' },
 ];
 
+const PROTOCOL_OPTIONS: Array<{ value: ProfileProtocol; label: string }> = [
+  { value: 'anthropic', label: 'Anthropic' },
+  { value: 'openai', label: 'OpenAI-Compatible' },
+  { value: 'google', label: 'Gemini' },
+];
+
 export function formatProtocolLabel(protocol: ProfileProtocol): string {
   switch (protocol) {
     case 'anthropic':
@@ -102,22 +108,26 @@ export function ProviderProfilesSummaryCard({
 
 export function CreateApiKeyProfileSection({
   displayName,
+  protocol,
   baseUrl,
   apiKey,
   models,
   busy,
   onDisplayNameChange,
+  onProtocolChange,
   onBaseUrlChange,
   onApiKeyChange,
   onModelsChange,
   onCreate,
 }: {
   displayName: string;
+  protocol: ProfileProtocol;
   baseUrl: string;
   apiKey: string;
   models: string[];
   busy: boolean;
   onDisplayNameChange: (value: string) => void;
+  onProtocolChange: (value: ProfileProtocol) => void;
   onBaseUrlChange: (value: string) => void;
   onApiKeyChange: (value: string) => void;
   onModelsChange: (value: string[]) => void;
@@ -146,15 +156,27 @@ export function CreateApiKeyProfileSection({
               placeholder="账号显示名（例如 my-glm）"
               className="rounded border border-[#E8DCCF] bg-white px-3 py-2 text-sm"
             />
-            <div className="rounded border border-[#E8DCCF] bg-white px-3 py-2 text-sm text-[#8A776B]">
-              协议自动识别：{formatProtocolLabel(inferredProtocol)}
-            </div>
+            <select
+              value={protocol}
+              onChange={(e) => onProtocolChange(e.target.value as ProfileProtocol)}
+              aria-label="Protocol"
+              className="rounded border border-[#E8DCCF] bg-white px-3 py-2 text-sm text-[#5C4B42]"
+            >
+              {PROTOCOL_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
             <input
               value={baseUrl}
               onChange={(e) => onBaseUrlChange(e.target.value)}
               placeholder="Base URL"
               className="rounded border border-[#E8DCCF] bg-white px-3 py-2 text-sm md:col-span-2"
             />
+            <div className="rounded border border-[#E8DCCF] bg-white px-3 py-2 text-sm text-[#8A776B] md:col-span-2">
+              协议建议：{formatProtocolLabel(inferredProtocol)}
+            </div>
             <input
               value={apiKey}
               onChange={(e) => onApiKeyChange(e.target.value)}

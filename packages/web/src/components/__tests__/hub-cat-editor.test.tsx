@@ -114,6 +114,47 @@ describe('HubCatEditor', () => {
     expect(Object.prototype.hasOwnProperty.call(payload, 'name')).toBe(false);
   });
 
+  it('buildCatPayload recomputes mcpSupport when client changes on existing cat', () => {
+    const baseForm: HubCatEditorFormState = {
+      catId: 'runtime-codex',
+      name: '运行时缅因猫',
+      displayName: '运行时缅因猫',
+      nickname: '',
+      avatar: '/avatars/codex.png',
+      colorPrimary: '#16a34a',
+      colorSecondary: '#bbf7d0',
+      mentionPatterns: '@runtime-codex',
+      roleDescription: '审查',
+      personality: '严谨',
+      teamStrengths: '',
+      caution: '',
+      strengths: '',
+      client: 'openai',
+      providerProfileId: '',
+      defaultModel: 'gpt-5.4',
+      commandArgs: '',
+      sessionChain: 'true',
+      maxPromptTokens: '',
+      maxContextTokens: '',
+      maxMessages: '',
+      maxContentLengthPerMsg: '',
+    };
+    const existingCat = {
+      id: 'runtime-codex',
+      name: 'runtime-codex',
+      displayName: '运行时缅因猫',
+      provider: 'antigravity',
+      defaultModel: 'gemini-bridge',
+      color: { primary: '#16a34a', secondary: '#bbf7d0' },
+      mentionPatterns: ['@runtime-codex'],
+      avatar: '/avatars/codex.png',
+      roleDescription: '审查',
+    } as CatData;
+
+    const payload = buildCatPayload(baseForm, existingCat) as Record<string, unknown>;
+    expect(payload.mcpSupport).toBe(true);
+  });
+
   it('renders normal member provider/model fields and saves to /api/cats', async () => {
     const onSaved = vi.fn(() => Promise.resolve());
     mockApiFetch.mockImplementation((path: string) => {
@@ -815,6 +856,7 @@ describe('HubCatEditor', () => {
     const payload = JSON.parse(String(patchCall?.[1]?.body));
     expect(payload.client).toBe('antigravity');
     expect(payload.providerProfileId).toBeNull();
+    expect(payload.mcpSupport).toBe(false);
   });
 
   it('sends contextBudget=null when clearing existing runtime budget', async () => {
