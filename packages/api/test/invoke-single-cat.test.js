@@ -2669,6 +2669,46 @@ describe('invokeSingleCat audit events (P1 fix)', () => {
     assert.equal(callbackEnv.OPENAI_API_BASE, 'https://api.bound.example');
   });
 
+  it('F127 P1: keeps env-based codex auth untouched when no openai profile is explicitly configured', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'f127-openai-env-auth-'));
+    const apiDir = join(root, 'packages', 'api');
+    await mkdir(apiDir, { recursive: true });
+    await writeFile(join(root, 'pnpm-workspace.yaml'), 'packages:\n  - "packages/*"\n', 'utf-8');
+
+    const optionsSeen = [];
+    const service = {
+      async *invoke(_prompt, options) {
+        optionsSeen.push(options ?? {});
+        yield { type: 'done', catId: 'codex', timestamp: Date.now() };
+      },
+    };
+
+    const deps = makeDeps();
+    const previousCwd = process.cwd();
+    try {
+      process.chdir(apiDir);
+      await collect(
+        invokeSingleCat(deps, {
+          catId: 'codex',
+          service,
+          prompt: 'test',
+          userId: 'user-f127-openai-env-auth',
+          threadId: 'thread-f127-openai-env-auth',
+          isLastCat: true,
+        }),
+      );
+    } finally {
+      process.chdir(previousCwd);
+      await rm(root, { recursive: true, force: true });
+    }
+
+    const callbackEnv = optionsSeen[0]?.callbackEnv ?? {};
+    assert.equal(Object.hasOwn(callbackEnv, 'CODEX_AUTH_MODE'), false);
+    assert.equal(callbackEnv.OPENAI_API_KEY, undefined);
+    assert.equal(callbackEnv.OPENAI_BASE_URL, undefined);
+    assert.equal(callbackEnv.OPENAI_API_BASE, undefined);
+  });
+
   it('F062-fix: skips auto-seal for api_key mode when context health is approx', async () => {
     const { createProviderProfile } = await import('../dist/config/provider-profiles.js');
     const root = await mkdtemp(join(tmpdir(), 'f062-approx-no-seal-'));

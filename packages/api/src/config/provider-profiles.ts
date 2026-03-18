@@ -134,19 +134,44 @@ function normalizeBaseUrl(baseUrl: string | undefined): string | undefined {
   return trimmed ? trimmed.replace(/\/+$/, '') : undefined;
 }
 
-function findRuntimeCatsBoundToProfile(projectRoot: string, profileId: string): string[] {
+interface BoundRuntimeCatReference {
+  catId: string;
+  defaultModel: string;
+}
+
+function collectRuntimeCatsBoundToProfile(projectRoot: string, profileId: string): BoundRuntimeCatReference[] {
   const catalog = readCatCatalog(projectRoot);
   if (!catalog) return [];
 
-  const boundCatIds = new Set<string>();
+  const references: BoundRuntimeCatReference[] = [];
   for (const breed of catalog.breeds) {
     for (const variant of breed.variants) {
       if (variant.providerProfileId === profileId) {
-        boundCatIds.add(variant.catId ?? breed.catId);
+        references.push({
+          catId: variant.catId ?? breed.catId,
+          defaultModel: variant.defaultModel,
+        });
       }
     }
   }
+  return references;
+}
+
+function findRuntimeCatsBoundToProfile(projectRoot: string, profileId: string): string[] {
+  const boundCatIds = new Set(collectRuntimeCatsBoundToProfile(projectRoot, profileId).map((binding) => binding.catId));
   return Array.from(boundCatIds);
+}
+
+function assertBoundRuntimeCatModelsCompatible(projectRoot: string, profileId: string, models: string[]): void {
+  if (models.length === 0) return;
+  const incompatibleBindings = collectRuntimeCatsBoundToProfile(projectRoot, profileId).filter(
+    (binding) => !models.includes(binding.defaultModel),
+  );
+  if (incompatibleBindings.length === 0) return;
+  const bindings = Array.from(new Set(incompatibleBindings.map((binding) => `${binding.catId} (${binding.defaultModel})`)));
+  throw new Error(
+    `provider profile "${profileId}" models must include bound runtime cat defaults: ${bindings.join(', ')}`,
+  );
 }
 
 function normalizeModels(models: string[] | undefined, modelOverride?: string): string[] {
@@ -626,6 +651,8 @@ export async function updateProviderProfile(
     delete secrets.profiles[profile.id];
     delete profile.baseUrl;
   }
+
+  assertBoundRuntimeCatModelsCompatible(projectRoot, profile.id, profile.models);
 
   await writeRaw(metaPath, secretsPath, meta, secrets);
   return toViewProfile(profile, secrets);

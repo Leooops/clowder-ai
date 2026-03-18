@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, it } from 'node:test';
 const {
   readProviderProfiles,
   createProviderProfile,
+  updateProviderProfile,
   activateProviderProfile,
   deleteProviderProfile,
   getProviderProfile,
@@ -180,6 +181,47 @@ describe('provider profile store', () => {
 
     const profiles = await readProviderProfiles(projectRoot);
     assert.equal(profiles.providers.some((profile) => profile.id === sponsor.id), false);
+  });
+
+  it('rejects profile model updates that invalidate bound runtime cats', async () => {
+    const templateRaw = await readFile(join(process.cwd(), '..', '..', 'cat-template.json'), 'utf-8');
+    await writeFile(join(projectRoot, 'cat-template.json'), templateRaw, 'utf-8');
+
+    const openaiProfile = await createProviderProfile(projectRoot, {
+      provider: 'openai',
+      name: 'openai-bound',
+      mode: 'api_key',
+      authType: 'api_key',
+      protocol: 'openai',
+      baseUrl: 'https://api.openai-bound.dev',
+      apiKey: 'sk-openai-bound',
+      models: ['gpt-5.4', 'gpt-5.4-mini'],
+      setActive: false,
+    });
+
+    await createRuntimeCat(projectRoot, {
+      catId: 'openai-runtime-cat',
+      breedId: 'openai-runtime-cat',
+      name: 'OpenAI 绑定猫',
+      displayName: 'OpenAI 绑定猫',
+      avatar: '/avatars/openai-bound.png',
+      color: { primary: '#2563eb', secondary: '#bfdbfe' },
+      mentionPatterns: ['@openai-runtime-cat'],
+      providerProfileId: openaiProfile.id,
+      roleDescription: '依赖 OpenAI profile',
+      personality: '稳定',
+      provider: 'openai',
+      defaultModel: 'gpt-5.4',
+      mcpSupport: true,
+      cli: { command: 'codex', outputFormat: 'json' },
+    });
+
+    await assert.rejects(
+      updateProviderProfile(projectRoot, 'openai', openaiProfile.id, {
+        models: ['gpt-5.4-mini'],
+      }),
+      /models must include bound runtime cat defaults: openai-runtime-cat \(gpt-5\.4\)/i,
+    );
   });
 
   it('keeps anthropic active profile when activating non-anthropic profiles', async () => {

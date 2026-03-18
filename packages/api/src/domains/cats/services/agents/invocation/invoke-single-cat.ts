@@ -638,9 +638,18 @@ export async function* invokeSingleCat(deps: InvocationDeps, params: InvocationP
       try {
         const profile = await resolveProfileForProtocol('openai');
         if (profile) {
-          callbackEnv.CODEX_AUTH_MODE = profile.mode === 'api_key' ? 'api_key' : 'oauth';
-          if (profile.mode === 'api_key' && profile.apiKey) {
-            callbackEnv.OPENAI_API_KEY = profile.apiKey;
+          if (profile.mode === 'api_key') {
+            callbackEnv.CODEX_AUTH_MODE = 'api_key';
+            if (profile.apiKey) {
+              callbackEnv.OPENAI_API_KEY = profile.apiKey;
+            }
+          } else {
+            // Keep env-driven auth untouched when runtime falls back to default codex-oauth
+            // without an explicit member binding.
+            const shouldForceOauth = boundProviderProfileId === profile.id || profile.id !== 'codex-oauth';
+            if (shouldForceOauth) {
+              callbackEnv.CODEX_AUTH_MODE = 'oauth';
+            }
           }
           if (profile.baseUrl) {
             callbackEnv.OPENAI_BASE_URL = profile.baseUrl;
