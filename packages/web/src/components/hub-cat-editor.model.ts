@@ -123,6 +123,10 @@ function protocolForClient(client: ClientValue): 'anthropic' | 'openai' | 'googl
       return 'openai';
     case 'google':
       return 'google';
+    case 'dare':
+      return 'openai';
+    case 'opencode':
+      return 'anthropic';
     default:
       return null;
   }
@@ -130,11 +134,9 @@ function protocolForClient(client: ClientValue): 'anthropic' | 'openai' | 'googl
 
 export function filterProfiles(client: ClientValue, profiles: ProfileItem[]): ProfileItem[] {
   if (client === 'antigravity') return [];
-  if (client === 'dare' || client === 'opencode') {
-    return profiles.filter((profile) => profile.authType === 'api_key');
-  }
   const protocol = protocolForClient(client);
-  return profiles.filter((profile) => profile.authType === 'api_key' || profile.protocol === protocol);
+  if (!protocol) return [];
+  return profiles.filter((profile) => profile.protocol === protocol);
 }
 
 export function initialState(cat?: CatData | null, draft?: HubCatEditorDraft | null): HubCatEditorFormState {
@@ -265,6 +267,13 @@ function trimText(value: string): string {
 
 export function buildCatPayload(form: HubCatEditorFormState, cat?: CatData | null) {
   const contextBudget = buildContextBudget(form);
+  const hasExistingBudget = Boolean(cat?.contextBudget);
+  const contextBudgetPatch =
+    contextBudget !== undefined
+      ? { contextBudget }
+      : cat && hasExistingBudget
+        ? { contextBudget: null as null }
+        : {};
   const name = trimText(form.name);
   const displayName = trimText(form.displayName) || name;
   const common = {
@@ -283,7 +292,7 @@ export function buildCatPayload(form: HubCatEditorFormState, cat?: CatData | nul
     caution: trimText(form.caution) || null,
     strengths: splitStrengthTags(form.strengths),
     sessionChain: form.sessionChain === 'true',
-    ...(contextBudget ? { contextBudget } : {}),
+    ...contextBudgetPatch,
   };
 
   if (form.client === 'antigravity') {

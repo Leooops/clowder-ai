@@ -75,7 +75,7 @@ const updateCatSchema = z.object({
   color: colorSchema.optional(),
   mentionPatterns: z.array(z.string().min(1)).min(1).optional(),
   providerProfileId: z.string().min(1).optional(),
-  contextBudget: contextBudgetSchema.optional(),
+  contextBudget: contextBudgetSchema.nullable().optional(),
   roleDescription: z.string().min(1).optional(),
   personality: z.string().optional(),
   teamStrengths: z.string().optional(),
@@ -373,9 +373,21 @@ export const catsRoutes: FastifyPluginAsync<CatsRoutesOptions> = async (app, opt
 
     const projectRoot = resolveProjectRoot();
     const managedIdsBefore = getManagedCatalogIds(projectRoot);
-    deleteRuntimeCat(projectRoot, request.params.id);
-    await reconcileCatRegistry(projectRoot, managedIdsBefore, opts.onCatalogChanged);
-    return { deleted: true, id: request.params.id, updatedBy: operator };
+    try {
+      deleteRuntimeCat(projectRoot, request.params.id);
+      await reconcileCatRegistry(projectRoot, managedIdsBefore, opts.onCatalogChanged);
+      return { deleted: true, id: request.params.id, updatedBy: operator };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (/not found/i.test(message)) {
+        reply.status(404);
+      } else if (/cannot delete seed cat/i.test(message)) {
+        reply.status(409);
+      } else {
+        reply.status(400);
+      }
+      return { error: message };
+    }
   });
 
   // GET /api/cats/:id/status - 获取猫猫状态

@@ -249,6 +249,15 @@ export function HubProviderProfilesTab() {
     () => customProfiles.filter((profile) => matchesFilter(profile.id, profile.authType)),
     [customProfiles, matchesFilter],
   );
+  const isProfileActive = useCallback(
+    (profile: { id: string; protocol: ProfileProtocol }) => {
+      if (!data) return false;
+      const protocolActive = data.activeProfileIds?.[profile.protocol];
+      if (protocolActive !== undefined) return protocolActive === profile.id;
+      return data.activeProfileId === profile.id;
+    },
+    [data],
+  );
 
   if (loading) return <p className="text-sm text-gray-400">加载中...</p>;
   if (!data) return <p className="text-sm text-gray-400">暂无数据</p>;
@@ -294,7 +303,7 @@ export function HubProviderProfilesTab() {
                 <HubProviderProfileItem
                   key={profile.id}
                   profile={profile}
-                  isActive={data.activeProfileId === profile.id}
+                  isActive={isProfileActive(profile)}
                   busy={busyId === profile.id}
                   testResult={testResultById[profile.id]}
                   onActivate={activateProfile}
@@ -319,7 +328,7 @@ export function HubProviderProfilesTab() {
                 <HubProviderProfileItem
                   key={profile.id}
                   profile={profile}
-                  isActive={data.activeProfileId === profile.id}
+                  isActive={isProfileActive(profile)}
                   busy={busyId === profile.id}
                   testResult={testResultById[profile.id]}
                   onActivate={activateProfile}

@@ -9,6 +9,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { before, describe, it, mock } from 'node:test';
+import { catRegistry } from '@cat-cafe/shared';
 
 async function collect(iterable) {
   const msgs = [];
@@ -2587,6 +2588,85 @@ describe('invokeSingleCat audit events (P1 fix)', () => {
     assert.equal(callbackEnv.CAT_CAFE_ANTHROPIC_PROFILE_MODE, 'api_key');
     assert.equal(callbackEnv.CAT_CAFE_ANTHROPIC_BASE_URL, 'https://api.root.example');
     assert.equal(callbackEnv.CAT_CAFE_ANTHROPIC_API_KEY, 'sk-root-profile');
+  });
+
+  it('F127 P1: prefers member-bound openai profile over protocol active profile', async () => {
+    const { createProviderProfile } = await import('../dist/config/provider-profiles.js');
+    const root = await mkdtemp(join(tmpdir(), 'f127-openai-profile-'));
+    const apiDir = join(root, 'packages', 'api');
+    await mkdir(apiDir, { recursive: true });
+    await writeFile(join(root, 'pnpm-workspace.yaml'), 'packages:\n  - "packages/*"\n', 'utf-8');
+
+    await createProviderProfile(root, {
+      provider: 'openai',
+      name: 'global-openai',
+      mode: 'api_key',
+      authType: 'api_key',
+      protocol: 'openai',
+      baseUrl: 'https://api.global.example',
+      apiKey: 'sk-global-openai',
+      setActive: true,
+    });
+    const boundProfile = await createProviderProfile(root, {
+      provider: 'openai',
+      name: 'bound-openai',
+      mode: 'api_key',
+      authType: 'api_key',
+      protocol: 'openai',
+      baseUrl: 'https://api.bound.example',
+      apiKey: 'sk-bound-openai',
+      setActive: false,
+    });
+
+    const registrySnapshot = catRegistry.getAllConfigs();
+    const originalConfig = catRegistry.tryGet('codex')?.config;
+    assert.ok(originalConfig, 'codex config should exist in registry');
+    const boundCatId = 'codex-bound-profile-test';
+    catRegistry.register(boundCatId, {
+      ...originalConfig,
+      id: boundCatId,
+      mentionPatterns: [`@${boundCatId}`],
+      provider: 'openai',
+      providerProfileId: boundProfile.id,
+      defaultModel: 'gpt-5.4',
+    });
+
+    const optionsSeen = [];
+    const service = {
+      async *invoke(_prompt, options) {
+        optionsSeen.push(options ?? {});
+        yield { type: 'done', catId: 'codex', timestamp: Date.now() };
+      },
+    };
+
+    const deps = makeDeps();
+    const previousCwd = process.cwd();
+    try {
+      process.chdir(apiDir);
+      await collect(
+        invokeSingleCat(deps, {
+          catId: boundCatId,
+          service,
+          prompt: 'test',
+          userId: 'user-f127-openai-bound',
+          threadId: 'thread-f127-openai-bound',
+          isLastCat: true,
+        }),
+      );
+    } finally {
+      process.chdir(previousCwd);
+      catRegistry.reset();
+      for (const [id, config] of Object.entries(registrySnapshot)) {
+        catRegistry.register(id, config);
+      }
+      await rm(root, { recursive: true, force: true });
+    }
+
+    const callbackEnv = optionsSeen[0]?.callbackEnv ?? {};
+    assert.equal(callbackEnv.CODEX_AUTH_MODE, 'api_key');
+    assert.equal(callbackEnv.OPENAI_API_KEY, 'sk-bound-openai');
+    assert.equal(callbackEnv.OPENAI_BASE_URL, 'https://api.bound.example');
+    assert.equal(callbackEnv.OPENAI_API_BASE, 'https://api.bound.example');
   });
 
   it('F062-fix: skips auto-seal for api_key mode when context health is approx', async () => {

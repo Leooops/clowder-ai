@@ -174,6 +174,209 @@ describe('HubCatEditor', () => {
     expect(container.querySelector('select[aria-label="Provider"]')).toBeNull();
   });
 
+  it('filters provider options by selected client protocol', async () => {
+    mockApiFetch.mockImplementation((path: string) => {
+      if (path === '/api/provider-profiles') {
+        return Promise.resolve(
+          jsonResponse({
+            projectPath: '/tmp/project',
+            activeProfileId: 'codex-oauth',
+            providers: [
+              {
+                id: 'codex-oauth',
+                provider: 'codex-oauth',
+                displayName: 'Codex (OAuth)',
+                name: 'Codex (OAuth)',
+                authType: 'oauth',
+                protocol: 'openai',
+                builtin: true,
+                mode: 'subscription',
+                models: ['gpt-5.4'],
+                hasApiKey: false,
+                createdAt: '2026-03-18T00:00:00.000Z',
+                updatedAt: '2026-03-18T00:00:00.000Z',
+              },
+              {
+                id: 'claude-sponsor',
+                provider: 'claude-sponsor',
+                displayName: 'Claude Sponsor',
+                name: 'Claude Sponsor',
+                authType: 'api_key',
+                protocol: 'anthropic',
+                builtin: false,
+                mode: 'api_key',
+                models: ['claude-opus-4-6'],
+                hasApiKey: true,
+                createdAt: '2026-03-18T00:00:00.000Z',
+                updatedAt: '2026-03-18T00:00:00.000Z',
+              },
+            ],
+          }),
+        );
+      }
+      throw new Error(`Unexpected apiFetch path: ${path}`);
+    });
+
+    await act(async () => {
+      root.render(React.createElement(HubCatEditor, { open: true, onClose: vi.fn(), onSaved: vi.fn() }));
+    });
+    await flushEffects();
+
+    await changeField(queryField(container, 'select[aria-label="Client"]'), 'openai', 'change');
+    await flushEffects();
+    const providerSelect = queryField<HTMLSelectElement>(container, 'select[aria-label="Provider"]');
+    const optionLabels = Array.from(providerSelect.options).map((option) => option.textContent ?? '');
+    expect(optionLabels).toContain('Codex (OAuth)');
+    expect(optionLabels).not.toContain('Claude Sponsor');
+  });
+
+  it('preserves existing model when it is not listed in provider defaults', async () => {
+    const existingCat = {
+      id: 'runtime-codex',
+      name: 'runtime-codex',
+      displayName: '运行时缅因猫',
+      provider: 'openai',
+      providerProfileId: 'codex-oauth',
+      defaultModel: 'gpt-5.3-codex-spark',
+      color: { primary: '#5B8C5A', secondary: '#D4E6D3' },
+      mentionPatterns: ['@runtime-codex'],
+      avatar: '/avatars/codex.png',
+      roleDescription: 'review',
+      source: 'runtime',
+    } as CatData;
+
+    mockApiFetch.mockImplementation((path: string, init?: RequestInit) => {
+      if (path === '/api/provider-profiles') {
+        return Promise.resolve(
+          jsonResponse({
+            projectPath: '/tmp/project',
+            activeProfileId: 'codex-oauth',
+            providers: [
+              {
+                id: 'codex-oauth',
+                provider: 'codex-oauth',
+                displayName: 'Codex (OAuth)',
+                name: 'Codex (OAuth)',
+                authType: 'oauth',
+                protocol: 'openai',
+                builtin: true,
+                mode: 'subscription',
+                models: ['gpt-5.4'],
+                hasApiKey: false,
+                createdAt: '2026-03-18T00:00:00.000Z',
+                updatedAt: '2026-03-18T00:00:00.000Z',
+              },
+            ],
+          }),
+        );
+      }
+      if (path === '/api/config/session-strategy') {
+        return Promise.resolve(jsonResponse({ cats: [] }));
+      }
+      if (path === '/api/cats/runtime-codex' && init?.method === 'PATCH') {
+        return Promise.resolve(jsonResponse({ cat: { id: 'runtime-codex' } }));
+      }
+      throw new Error(`Unexpected apiFetch path: ${path}`);
+    });
+
+    await act(async () => {
+      root.render(React.createElement(HubCatEditor, { open: true, cat: existingCat, onClose: vi.fn(), onSaved: vi.fn() }));
+    });
+    await flushEffects();
+
+    const saveButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === '保存');
+    await act(async () => {
+      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushEffects();
+
+    const patchCall = mockApiFetch.mock.calls.find(
+      ([path, init]) => path === '/api/cats/runtime-codex' && init?.method === 'PATCH',
+    );
+    expect(patchCall).toBeTruthy();
+    const payload = JSON.parse(String(patchCall?.[1]?.body));
+    expect(payload.defaultModel).toBe('gpt-5.3-codex-spark');
+  });
+
+  it('sends contextBudget=null when clearing existing runtime budget', async () => {
+    const existingCat = {
+      id: 'runtime-codex',
+      name: 'runtime-codex',
+      displayName: '运行时缅因猫',
+      provider: 'openai',
+      providerProfileId: 'codex-oauth',
+      defaultModel: 'gpt-5.4',
+      color: { primary: '#5B8C5A', secondary: '#D4E6D3' },
+      mentionPatterns: ['@runtime-codex'],
+      avatar: '/avatars/codex.png',
+      roleDescription: 'review',
+      source: 'runtime',
+      contextBudget: {
+        maxPromptTokens: 32000,
+        maxContextTokens: 24000,
+        maxMessages: 40,
+        maxContentLengthPerMsg: 8000,
+      },
+    } as CatData;
+
+    mockApiFetch.mockImplementation((path: string, init?: RequestInit) => {
+      if (path === '/api/provider-profiles') {
+        return Promise.resolve(
+          jsonResponse({
+            projectPath: '/tmp/project',
+            activeProfileId: 'codex-oauth',
+            providers: [
+              {
+                id: 'codex-oauth',
+                provider: 'codex-oauth',
+                displayName: 'Codex (OAuth)',
+                name: 'Codex (OAuth)',
+                authType: 'oauth',
+                protocol: 'openai',
+                builtin: true,
+                mode: 'subscription',
+                models: ['gpt-5.4'],
+                hasApiKey: false,
+                createdAt: '2026-03-18T00:00:00.000Z',
+                updatedAt: '2026-03-18T00:00:00.000Z',
+              },
+            ],
+          }),
+        );
+      }
+      if (path === '/api/config/session-strategy') {
+        return Promise.resolve(jsonResponse({ cats: [] }));
+      }
+      if (path === '/api/cats/runtime-codex' && init?.method === 'PATCH') {
+        return Promise.resolve(jsonResponse({ cat: { id: 'runtime-codex' } }));
+      }
+      throw new Error(`Unexpected apiFetch path: ${path}`);
+    });
+
+    await act(async () => {
+      root.render(React.createElement(HubCatEditor, { open: true, cat: existingCat, onClose: vi.fn(), onSaved: vi.fn() }));
+    });
+    await flushEffects();
+
+    await changeField(queryField(container, 'input[aria-label="Max Prompt Tokens"]'), '');
+    await changeField(queryField(container, 'input[aria-label="Max Context Tokens"]'), '');
+    await changeField(queryField(container, 'input[aria-label="Max Messages"]'), '');
+    await changeField(queryField(container, 'input[aria-label="Max Content Length"]'), '');
+
+    const saveButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === '保存');
+    await act(async () => {
+      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushEffects();
+
+    const patchCall = mockApiFetch.mock.calls.find(
+      ([path, init]) => path === '/api/cats/runtime-codex' && init?.method === 'PATCH',
+    );
+    expect(patchCall).toBeTruthy();
+    const payload = JSON.parse(String(patchCall?.[1]?.body));
+    expect(payload.contextBudget).toBeNull();
+  });
+
   it('requires all runtime budget fields when any budget value is provided', async () => {
     mockApiFetch.mockImplementation((path: string) => {
       if (path === '/api/provider-profiles') {

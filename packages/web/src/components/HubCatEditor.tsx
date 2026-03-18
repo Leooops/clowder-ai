@@ -153,10 +153,15 @@ export function HubCatEditor({ cat, draft, open, onClose, onSaved }: HubCatEdito
       const nextProfile =
         availableProfiles.find((profile) => profile.id === prev.providerProfileId) ?? availableProfiles[0] ?? null;
       if (!nextProfile) return prev;
-      const nextModel =
-        nextProfile.models.length > 0 && !nextProfile.models.includes(prev.defaultModel)
-          ? nextProfile.models[0]!
-          : prev.defaultModel;
+      const sameProfile = prev.providerProfileId === nextProfile.id;
+      const hasDefaultModel = prev.defaultModel.trim().length > 0;
+      const modelSupported = hasDefaultModel && nextProfile.models.includes(prev.defaultModel);
+      let nextModel = prev.defaultModel;
+      if (!hasDefaultModel) {
+        nextModel = nextProfile.models[0] ?? '';
+      } else if (!modelSupported && !sameProfile) {
+        nextModel = nextProfile.models[0] ?? prev.defaultModel;
+      }
       if (prev.providerProfileId === nextProfile.id && prev.defaultModel === nextModel) return prev;
       return { ...prev, providerProfileId: nextProfile.id, defaultModel: nextModel };
     });

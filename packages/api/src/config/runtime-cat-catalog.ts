@@ -2,7 +2,7 @@ import { join, resolve } from 'node:path';
 import type { CatBreed, CatCafeConfig, CatColor, CatProvider, CatVariant, CliConfig, ContextBudget } from '@cat-cafe/shared';
 import { createCatId } from '@cat-cafe/shared';
 import { clearBudgetCache } from './cat-budgets.js';
-import { _resetCachedConfig, loadCatConfig } from './cat-config-loader.js';
+import { _resetCachedConfig, loadCatConfig, toAllCatConfigs } from './cat-config-loader.js';
 import { clearVoiceCache } from './cat-voices.js';
 import { bootstrapCatCatalog, readCatCatalog, writeCatCatalog } from './cat-catalog-store.js';
 
@@ -49,7 +49,7 @@ export interface RuntimeCatUpdate {
   mcpSupport?: boolean;
   cli?: CliConfig;
   commandArgs?: string[];
-  contextBudget?: ContextBudget;
+  contextBudget?: ContextBudget | null;
 }
 
 interface BreedVariantLocation {
@@ -89,6 +89,16 @@ function readOrBootstrapCatalog(projectRoot: string): CatCafeConfig {
     throw new Error(`Runtime cat catalog missing at ${projectRoot}`);
   }
   return catalog;
+}
+
+function isSeedCat(projectRoot: string, catId: string): boolean {
+  try {
+    const templatePath = resolveTemplatePath(projectRoot);
+    const seedCats = toAllCatConfigs(loadCatConfig(templatePath));
+    return Object.prototype.hasOwnProperty.call(seedCats, catId);
+  } catch {
+    return false;
+  }
 }
 
 function invalidateRuntimeCatalogCaches(): void {
@@ -276,7 +286,13 @@ export function updateRuntimeCat(projectRoot: string, catId: string, patch: Runt
   if (patch.defaultModel !== undefined) variant.defaultModel = patch.defaultModel;
   if (patch.mcpSupport !== undefined) variant.mcpSupport = patch.mcpSupport;
   if (patch.cli !== undefined) variant.cli = patch.cli;
-  if (patch.contextBudget !== undefined) variant.contextBudget = patch.contextBudget;
+  if (patch.contextBudget !== undefined) {
+    if (patch.contextBudget) {
+      variant.contextBudget = patch.contextBudget;
+    } else {
+      delete variant.contextBudget;
+    }
+  }
   if (patch.commandArgs !== undefined) {
     if (patch.commandArgs.length > 0) {
       variant.commandArgs = patch.commandArgs;
@@ -289,6 +305,9 @@ export function updateRuntimeCat(projectRoot: string, catId: string, patch: Runt
 }
 
 export function deleteRuntimeCat(projectRoot: string, catId: string): CatCafeConfig {
+  if (isSeedCat(projectRoot, catId)) {
+    throw new Error(`Cannot delete seed cat "${catId}" from runtime catalog`);
+  }
   const catalog = cloneCatalog(readOrBootstrapCatalog(projectRoot));
   const located = findBreedVariant(catalog as unknown as CatCafeConfig, catId);
   if (!located) {

@@ -12,6 +12,7 @@ const {
   deleteProviderProfile,
   getProviderProfile,
   resolveAnthropicRuntimeProfile,
+  resolveRuntimeProviderProfile,
 } = await import('../dist/config/provider-profiles.js');
 
 /** @param {string} prefix */
@@ -105,6 +106,43 @@ describe('provider profile store', () => {
     const runtime = await resolveAnthropicRuntimeProfile(projectRoot);
     assert.equal(runtime.mode, 'subscription');
     assert.equal(runtime.apiKey, undefined);
+  });
+
+  it('keeps anthropic active profile when activating non-anthropic profiles', async () => {
+    const anthropicSponsor = await createProviderProfile(projectRoot, {
+      provider: 'anthropic',
+      name: 'anthropic-sponsor',
+      mode: 'api_key',
+      baseUrl: 'https://api.anthropic-sponsor.dev',
+      apiKey: 'sk-anthropic-sponsor',
+      setActive: true,
+    });
+    const openaiSponsor = await createProviderProfile(projectRoot, {
+      provider: 'openai',
+      name: 'codex-sponsor',
+      mode: 'api_key',
+      authType: 'api_key',
+      protocol: 'openai',
+      baseUrl: 'https://api.codex-sponsor.dev',
+      apiKey: 'sk-codex-sponsor',
+      setActive: false,
+    });
+
+    await activateProviderProfile(projectRoot, 'openai', openaiSponsor.id);
+    const data = await readProviderProfiles(projectRoot);
+    assert.equal(data.activeProfileId, anthropicSponsor.id);
+    assert.equal(data.activeProfileIds.anthropic, anthropicSponsor.id);
+    assert.equal(data.activeProfileIds.openai, openaiSponsor.id);
+
+    const anthropicRuntime = await resolveAnthropicRuntimeProfile(projectRoot);
+    assert.equal(anthropicRuntime.mode, 'api_key');
+    assert.equal(anthropicRuntime.baseUrl, 'https://api.anthropic-sponsor.dev');
+    assert.equal(anthropicRuntime.apiKey, 'sk-anthropic-sponsor');
+
+    const openaiRuntime = await resolveRuntimeProviderProfile(projectRoot, 'openai');
+    assert.equal(openaiRuntime?.mode, 'api_key');
+    assert.equal(openaiRuntime?.baseUrl, 'https://api.codex-sponsor.dev');
+    assert.equal(openaiRuntime?.apiKey, 'sk-codex-sponsor');
   });
 
   it('readProviderProfiles does not rewrite files when state is already normalized', async () => {

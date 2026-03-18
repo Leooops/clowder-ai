@@ -14,7 +14,11 @@ import { resolve } from 'node:path';
 import { type CatId, type ContextHealth, catRegistry, type MessageContent } from '@cat-cafe/shared';
 import { isSessionChainEnabled } from '../../../../../config/cat-config-loader.js';
 import { getContextWindowFallback } from '../../../../../config/context-window-sizes.js';
-import { resolveAnthropicRuntimeProfile } from '../../../../../config/provider-profiles.js';
+import {
+  resolveAnthropicRuntimeProfile,
+  resolveRuntimeProviderProfile,
+  resolveRuntimeProviderProfileById,
+} from '../../../../../config/provider-profiles.js';
 import { getSessionStrategy, shouldTakeAction } from '../../../../../config/session-strategy.js';
 import { DEFAULT_CLI_TIMEOUT_MS, resolveCliTimeoutMs } from '../../../../../utils/cli-timeout.js';
 import { findMonorepoRoot, isSameProject } from '../../../../../utils/monorepo-root.js';
@@ -574,16 +578,24 @@ export async function* invokeSingleCat(deps: InvocationDeps, params: InvocationP
       }
     }
 
-    // Provider profile injection (F062):
-    // Resolve active runtime profile from project-local `.cat-cafe` state and
-    // pass it to provider services via callback env.
-    // api_key profiles are automatically routed through the local anthropic-proxy
-    // gateway (started by start-dev.sh) for unified logging/fixing.
-    const provider = catRegistry.tryGet(catId as string)?.config.provider;
+    // Provider profile injection (F062/F127):
+    // Resolve runtime credentials from project-local `.cat-cafe` profile state.
+    // Member-level `providerProfileId` takes precedence over protocol-level active profiles.
+    const catConfig = catRegistry.tryGet(catId as string)?.config;
+    const provider = catConfig?.provider;
+    const boundProviderProfileId = catConfig?.providerProfileId?.trim() || undefined;
+    const projectRoot = workingDirectory ?? findMonorepoRoot(process.cwd());
+    const resolveProfileForProtocol = async (protocol: 'anthropic' | 'openai' | 'google') => {
+      if (boundProviderProfileId) {
+        const bound = await resolveRuntimeProviderProfileById(projectRoot, boundProviderProfileId);
+        if (bound?.protocol === protocol) return bound;
+      }
+      return resolveRuntimeProviderProfile(projectRoot, protocol);
+    };
+
     if (provider === 'anthropic' || provider === 'opencode') {
       try {
-        const projectRoot = workingDirectory ?? findMonorepoRoot(process.cwd());
-        const profile = await resolveAnthropicRuntimeProfile(projectRoot);
+        const profile = (await resolveProfileForProtocol('anthropic')) ?? (await resolveAnthropicRuntimeProfile(projectRoot));
         callbackEnv.CAT_CAFE_ANTHROPIC_PROFILE_MODE = profile.mode;
         if (profile.mode === 'api_key') {
           if (profile.apiKey) callbackEnv.CAT_CAFE_ANTHROPIC_API_KEY = profile.apiKey;
@@ -621,6 +633,49 @@ export async function* invokeSingleCat(deps: InvocationDeps, params: InvocationP
       } catch {
         // Best-effort fallback: default to subscription mode when profile resolution fails.
         callbackEnv.CAT_CAFE_ANTHROPIC_PROFILE_MODE = 'subscription';
+      }
+    } else if (provider === 'openai') {
+      try {
+        const profile = await resolveProfileForProtocol('openai');
+        if (profile) {
+          callbackEnv.CODEX_AUTH_MODE = profile.mode === 'api_key' ? 'api_key' : 'oauth';
+          if (profile.mode === 'api_key' && profile.apiKey) {
+            callbackEnv.OPENAI_API_KEY = profile.apiKey;
+          }
+          if (profile.baseUrl) {
+            callbackEnv.OPENAI_BASE_URL = profile.baseUrl;
+            callbackEnv.OPENAI_API_BASE = profile.baseUrl;
+          }
+          if (profile.modelOverride) {
+            callbackEnv.CAT_CAFE_OPENAI_MODEL_OVERRIDE = profile.modelOverride;
+          }
+        }
+      } catch {
+        /* openai profile resolution is best-effort */
+      }
+    } else if (provider === 'google') {
+      try {
+        const profile = await resolveProfileForProtocol('google');
+        if (profile?.mode === 'api_key' && profile.apiKey) {
+          callbackEnv.GEMINI_API_KEY = profile.apiKey;
+          callbackEnv.GOOGLE_API_KEY = profile.apiKey;
+        }
+        if (profile?.modelOverride) {
+          callbackEnv.CAT_CAFE_GEMINI_MODEL_OVERRIDE = profile.modelOverride;
+        }
+      } catch {
+        /* google profile resolution is best-effort */
+      }
+    } else if (provider === 'dare') {
+      try {
+        const profile = await resolveProfileForProtocol('openai');
+        if (profile?.mode === 'api_key' && profile.apiKey) {
+          callbackEnv.DARE_API_KEY = profile.apiKey;
+          if (profile.baseUrl) callbackEnv.DARE_ENDPOINT = profile.baseUrl;
+          if (profile.modelOverride) callbackEnv.CAT_CAFE_DARE_MODEL_OVERRIDE = profile.modelOverride;
+        }
+      } catch {
+        /* dare profile resolution is best-effort */
       }
     }
 

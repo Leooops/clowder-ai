@@ -185,6 +185,26 @@ describe('cats routes runtime CRUD', { concurrency: false }, () => {
       maxContentLengthPerMsg: 9000,
     });
 
+    const clearBudgetRes = await app.inject({
+      method: 'PATCH',
+      url: '/api/cats/runtime-spark',
+      headers: {
+        'content-type': 'application/json',
+        'x-cat-cafe-user': 'codex',
+      },
+      body: JSON.stringify({
+        contextBudget: null,
+      }),
+    });
+    assert.equal(clearBudgetRes.statusCode, 200);
+
+    const listAfterClearRes = await app.inject({ method: 'GET', url: '/api/cats' });
+    assert.equal(listAfterClearRes.statusCode, 200);
+    const listAfterClearBody = JSON.parse(listAfterClearRes.body);
+    const runtimeCatAfterClear = listAfterClearBody.cats.find((cat) => cat.id === 'runtime-spark');
+    assert.ok(runtimeCatAfterClear, 'runtime-spark should still exist');
+    assert.equal(runtimeCatAfterClear.contextBudget, undefined);
+
     const mentions = parseA2AMentions('@运行时火花 请跟进这个分支', createCatId('opus'));
     assert.ok(mentions.includes('runtime-spark'), 'new alias should route immediately');
   });
@@ -277,5 +297,32 @@ describe('cats routes runtime CRUD', { concurrency: false }, () => {
     const listRes = await app.inject({ method: 'GET', url: '/api/cats' });
     const listBody = JSON.parse(listRes.body);
     assert.equal(listBody.cats.some((cat) => cat.id === 'runtime-temp'), false);
+  });
+
+  it('DELETE /api/cats/:id blocks deletion for seed members', async () => {
+    const projectRoot = createProjectRoot();
+    process.env.CAT_TEMPLATE_PATH = join(projectRoot, 'cat-template.json');
+
+    const Fastify = (await import('fastify')).default;
+    const { catsRoutes } = await import('../dist/routes/cats.js');
+
+    const app = Fastify();
+    await app.register(catsRoutes);
+
+    const deleteRes = await app.inject({
+      method: 'DELETE',
+      url: '/api/cats/opus',
+      headers: {
+        'x-cat-cafe-user': 'codex',
+      },
+    });
+    assert.equal(deleteRes.statusCode, 409);
+    const deleteBody = JSON.parse(deleteRes.body);
+    assert.match(deleteBody.error, /cannot delete seed cat/i);
+
+    const listRes = await app.inject({ method: 'GET', url: '/api/cats' });
+    assert.equal(listRes.statusCode, 200);
+    const listBody = JSON.parse(listRes.body);
+    assert.equal(listBody.cats.some((cat) => cat.id === 'opus'), true);
   });
 });

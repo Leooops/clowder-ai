@@ -22,6 +22,7 @@ export interface ProfileItem {
 export interface ProviderProfilesResponse {
   projectPath: string;
   activeProfileId: string | null;
+  activeProfileIds?: Partial<Record<ProfileProtocol, string | null>>;
   providers: ProfileItem[];
 }
 

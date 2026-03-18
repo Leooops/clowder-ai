@@ -14,8 +14,11 @@ import { generateCliConfigs, readCapabilitiesConfig } from './config/capabilitie
 import { getCatContextBudget } from './config/cat-budgets.js';
 import { bootstrapDefaultCatCatalog, getConfigSessionStrategy, toAllCatConfigs } from './config/cat-config-loader.js';
 import { resolveFrontendBaseUrl, resolveFrontendCorsOrigins } from './config/frontend-origin.js';
-import { resolveAnthropicRuntimeProfile } from './config/provider-profiles.js';
-import { resolveProviderProfilesRoot } from './config/provider-profiles-root.js';
+import {
+  resolveAnthropicRuntimeProfile,
+  resolveRuntimeProviderProfile,
+  resolveRuntimeProviderProfileById,
+} from './config/provider-profiles.js';
 import { initRuntimeOverrides } from './config/session-strategy-overrides.js';
 import { assertStorageReady } from './config/storage-guard.js';
 import { createTaskProgressStore } from './domains/cats/services/agents/invocation/createTaskProgressStore.js';
@@ -284,15 +287,25 @@ async function main(): Promise<void> {
   // F065 Phase C: HandoffConfig for LLM-generated digest on seal
   const handoffConfig: HandoffConfig = {
     getBootstrapDepth: (catId: string) => getConfigSessionStrategy(catId)?.handoff?.bootstrapDepth ?? 'extractive',
-    resolveProfile: async (threadId: string, _catId: string) => {
+    resolveProfile: async (threadId: string, catId: string) => {
       try {
         let projectRoot = findMonorepoRoot(process.cwd());
         const thread = await threadStore.get(threadId);
         if (thread?.projectPath && thread.projectPath !== 'default') {
           projectRoot = thread.projectPath;
         }
-        const profilesRoot = await resolveProviderProfilesRoot(projectRoot);
-        const runtime = await resolveAnthropicRuntimeProfile(profilesRoot);
+        const catConfig = catRegistry.tryGet(catId)?.config;
+        if (catConfig?.provider === 'anthropic' || catConfig?.provider === 'opencode') {
+          const boundProfileId = catConfig.providerProfileId?.trim();
+          let runtime = boundProfileId ? await resolveRuntimeProviderProfileById(projectRoot, boundProfileId) : null;
+          if (!runtime || runtime.protocol !== 'anthropic') {
+            runtime = await resolveRuntimeProviderProfile(projectRoot, 'anthropic');
+          }
+          if (!runtime?.apiKey) return null;
+          return { apiKey: runtime.apiKey, baseUrl: runtime.baseUrl || 'https://api.anthropic.com' };
+        }
+
+        const runtime = await resolveAnthropicRuntimeProfile(projectRoot);
         if (!runtime.apiKey) return null;
         return { apiKey: runtime.apiKey, baseUrl: runtime.baseUrl || 'https://api.anthropic.com' };
       } catch {

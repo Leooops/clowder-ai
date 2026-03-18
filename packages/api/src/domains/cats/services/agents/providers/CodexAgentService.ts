@@ -57,14 +57,14 @@ interface CodexAgentServiceOptions {
 
 type CodexAuthMode = 'oauth' | 'api_key' | 'auto';
 
-function getCodexAuthMode(): CodexAuthMode {
-  const raw = process.env.CODEX_AUTH_MODE?.trim().toLowerCase();
+function getCodexAuthMode(callbackEnv?: Record<string, string>): CodexAuthMode {
+  const raw = callbackEnv?.CODEX_AUTH_MODE?.trim().toLowerCase() ?? process.env.CODEX_AUTH_MODE?.trim().toLowerCase();
   if (raw === 'api_key' || raw === 'auto' || raw === 'oauth') return raw;
   return 'oauth';
 }
 
-function applyAuthMode(env: Record<string, string>): Record<string, string | null> {
-  if (getCodexAuthMode() !== 'oauth') return env;
+function applyAuthMode(env: Record<string, string>, authMode: CodexAuthMode): Record<string, string | null> {
+  if (authMode !== 'oauth') return env;
 
   // OAuth-first default: explicitly delete key-based credentials from child env.
   // spawnCli interprets `null` as "remove this key from inherited process.env".
@@ -204,12 +204,13 @@ export class CodexAgentService implements AgentService {
   async *invoke(prompt: string, options?: AgentServiceOptions): AsyncIterable<AgentMessage> {
     // Codex CLI has no system prompt flag; prepend identity to prompt text
     const effectivePrompt = options?.systemPrompt ? `${options.systemPrompt}\n\n${prompt}` : prompt;
+    const effectiveModel = options?.callbackEnv?.CAT_CAFE_OPENAI_MODEL_OVERRIDE ?? this.model;
     const imagePaths = extractImagePaths(options?.contentBlocks, options?.uploadDir);
     const imageArgs = imagePaths.flatMap((path) => ['--image', path]);
 
     const sandboxMode = getCodexSandboxMode();
     const approvalPolicy = getCodexApprovalPolicy();
-    const modelArgs = ['--model', this.model];
+    const modelArgs = ['--model', effectiveModel];
     const approvalArgs = ['--config', `approval_policy="${approvalPolicy}"`];
     const catCafeMcpArgs = buildCatCafeMcpConfigArgs(options?.workingDirectory, options?.callbackEnv);
 
@@ -245,7 +246,7 @@ export class CodexAgentService implements AgentService {
           ...promptArgs,
         ];
 
-    const metadata: MessageMetadata = { provider: 'openai', model: this.model };
+    const metadata: MessageMetadata = { provider: 'openai', model: effectiveModel };
     const auditContext = options?.auditContext;
     const recentStreamErrors: string[] = [];
 
@@ -253,7 +254,8 @@ export class CodexAgentService implements AgentService {
       // Use real HOME — project-level AGENTS.md already overrides global ~/.codex/AGENTS.md.
       // HOME isolation was removed because Codex CLI rebuilds ~/.codex/ on startup,
       // overwriting pre-copied auth.json/config.toml/sessions (see bug-report/tea-coffee/).
-      const codexEnv = applyAuthMode(options?.callbackEnv ?? {});
+      const authMode = getCodexAuthMode(options?.callbackEnv);
+      const codexEnv = applyAuthMode(options?.callbackEnv ?? {}, authMode);
 
       const cliOpts = {
         command: 'codex' as const,

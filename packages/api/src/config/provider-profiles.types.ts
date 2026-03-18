@@ -2,6 +2,7 @@ export type ProviderProfileProtocol = 'anthropic' | 'openai' | 'google';
 export type ProviderProfileProvider = string;
 export type ProviderProfileMode = 'subscription' | 'api_key';
 export type ProviderProfileAuthType = 'oauth' | 'api_key';
+export type ActiveProviderProfileIds = Record<ProviderProfileProtocol, string | null>;
 
 export interface ProviderProfileMeta {
   id: string;
@@ -29,6 +30,7 @@ export interface ProviderProfileView extends ProviderProfileMeta {
 
 export interface ProviderProfilesView {
   activeProfileId: string | null;
+  activeProfileIds: ActiveProviderProfileIds;
   providers: ProviderProfileView[];
 }
 
@@ -66,9 +68,19 @@ export interface AnthropicRuntimeProfile {
   modelOverride?: string;
 }
 
+export interface RuntimeProviderProfile {
+  id: string;
+  protocol: ProviderProfileProtocol;
+  mode: ProviderProfileMode;
+  baseUrl?: string;
+  apiKey?: string;
+  modelOverride?: string;
+}
+
 export interface ProviderProfilesMetaFile {
   version: 2;
   activeProfileId: string | null;
+  activeProfileIds: ActiveProviderProfileIds;
   profiles: ProviderProfileMeta[];
 }
 

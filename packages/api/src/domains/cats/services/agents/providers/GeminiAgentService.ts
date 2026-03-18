@@ -73,7 +73,8 @@ export class GeminiAgentService implements AgentService {
   }
 
   private async *invokeGeminiCLI(prompt: string, options?: AgentServiceOptions): AsyncIterable<AgentMessage> {
-    const metadata: MessageMetadata = { provider: 'google', model: this.model };
+    const effectiveModel = options?.callbackEnv?.CAT_CAFE_GEMINI_MODEL_OVERRIDE ?? this.model;
+    const metadata: MessageMetadata = { provider: 'google', model: effectiveModel };
 
     // Gemini CLI has no system prompt flag; prepend identity to prompt text
     let effectivePrompt = options?.systemPrompt ? `${options.systemPrompt}\n\n${prompt}` : prompt;
@@ -88,7 +89,7 @@ export class GeminiAgentService implements AgentService {
     //   gemini --resume <sessionId> -p "<prompt>" -o stream-json
     // Prefer resume when sessionId is available so Gemini follows the same
     // session semantics as Claude/Codex (session-chain + self-heal).
-    const modelArgs = ['--model', this.model];
+    const modelArgs = ['--model', effectiveModel];
     const args: string[] = options?.sessionId
       ? ['--resume', options?.sessionId!, ...modelArgs, '-p', effectivePrompt, '-o', 'stream-json', '-y']
       : [...modelArgs, '-p', effectivePrompt, '-o', 'stream-json', '-y'];

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { relative, resolve, sep } from 'node:path';
 import type {
+  ActiveProviderProfileIds,
   AnthropicRuntimeProfile,
   CreateProviderProfileInput,
   NormalizedState,
@@ -14,11 +15,13 @@ import type {
   ProviderProfilesSecretsFile,
   ProviderProfilesView,
   ProviderProfileView,
+  RuntimeProviderProfile,
   UpdateProviderProfileInput,
 } from './provider-profiles.types.js';
 import { resolveProviderProfilesRoot } from './provider-profiles-root.js';
 
 export type {
+  ActiveProviderProfileIds,
   AnthropicRuntimeProfile,
   CreateProviderProfileInput,
   ProviderProfileAuthType,
@@ -28,6 +31,7 @@ export type {
   ProviderProfileProvider,
   ProviderProfilesView,
   ProviderProfileView,
+  RuntimeProviderProfile,
   UpdateProviderProfileInput,
 } from './provider-profiles.types.js';
 
@@ -35,6 +39,8 @@ const CAT_CAFE_DIR = '.cat-cafe';
 const META_FILENAME = 'provider-profiles.json';
 const SECRETS_FILENAME = 'provider-profiles.secrets.local.json';
 const DEFAULT_CLAUDE_OAUTH_PROVIDER_ID = 'claude-oauth';
+const DEFAULT_CODEX_OAUTH_PROVIDER_ID = 'codex-oauth';
+const DEFAULT_GEMINI_OAUTH_PROVIDER_ID = 'gemini-oauth';
 
 type LegacyProviderProfilesMetaFile = {
   version: 1;
@@ -73,8 +79,8 @@ const BUILTIN_PROVIDER_SPECS = [
     models: ['claude-opus-4-6', 'claude-sonnet-4'],
   },
   {
-    id: 'codex-oauth',
-    provider: 'codex-oauth',
+    id: DEFAULT_CODEX_OAUTH_PROVIDER_ID,
+    provider: DEFAULT_CODEX_OAUTH_PROVIDER_ID,
     displayName: 'Codex (OAuth)',
     authType: 'oauth' as const,
     protocol: 'openai' as const,
@@ -82,8 +88,8 @@ const BUILTIN_PROVIDER_SPECS = [
     models: ['gpt-5.4', 'gpt-5.3-codex'],
   },
   {
-    id: 'gemini-oauth',
-    provider: 'gemini-oauth',
+    id: DEFAULT_GEMINI_OAUTH_PROVIDER_ID,
+    provider: DEFAULT_GEMINI_OAUTH_PROVIDER_ID,
     displayName: 'Gemini (OAuth)',
     authType: 'oauth' as const,
     protocol: 'google' as const,
@@ -93,6 +99,12 @@ const BUILTIN_PROVIDER_SPECS = [
 ] satisfies Array<
   Pick<ProviderProfileMeta, 'id' | 'provider' | 'displayName' | 'authType' | 'protocol' | 'builtin' | 'models'>
 >;
+
+const PROTOCOL_DEFAULT_PROFILE_IDS: Record<ProviderProfileProtocol, string> = {
+  anthropic: DEFAULT_CLAUDE_OAUTH_PROVIDER_ID,
+  openai: DEFAULT_CODEX_OAUTH_PROVIDER_ID,
+  google: DEFAULT_GEMINI_OAUTH_PROVIDER_ID,
+};
 
 function safePath(projectRoot: string, ...segments: string[]): string {
   const root = resolve(projectRoot);
@@ -171,10 +183,45 @@ function createBuiltinProfiles(now = new Date().toISOString()): ProviderProfileM
   }));
 }
 
+function createDefaultActiveProfileIds(): ActiveProviderProfileIds {
+  return {
+    anthropic: DEFAULT_CLAUDE_OAUTH_PROVIDER_ID,
+    openai: DEFAULT_CODEX_OAUTH_PROVIDER_ID,
+    google: DEFAULT_GEMINI_OAUTH_PROVIDER_ID,
+  };
+}
+
+function ensureActiveProfileIds(meta: ProviderProfilesMetaFile): ActiveProviderProfileIds {
+  if (meta.activeProfileIds) return meta.activeProfileIds;
+  const next = createDefaultActiveProfileIds();
+  meta.activeProfileIds = next;
+  return next;
+}
+
+function syncLegacyActiveProfileId(meta: ProviderProfilesMetaFile): void {
+  const activeIds = ensureActiveProfileIds(meta);
+  meta.activeProfileId = activeIds.anthropic ?? DEFAULT_CLAUDE_OAUTH_PROVIDER_ID;
+}
+
+function findProtocolFallbackProfileId(meta: ProviderProfilesMetaFile, protocol: ProviderProfileProtocol): string | null {
+  const preferred = PROTOCOL_DEFAULT_PROFILE_IDS[protocol];
+  const builtin = meta.profiles.find((profile) => profile.id === preferred && profile.protocol === protocol);
+  if (builtin) return builtin.id;
+  const firstSameProtocol = meta.profiles.find((profile) => profile.protocol === protocol);
+  return firstSameProtocol?.id ?? null;
+}
+
+function setActiveProfile(meta: ProviderProfilesMetaFile, protocol: ProviderProfileProtocol, profileId: string | null): void {
+  const activeIds = ensureActiveProfileIds(meta);
+  activeIds[protocol] = profileId;
+  syncLegacyActiveProfileId(meta);
+}
+
 function createDefaultMeta(): ProviderProfilesMetaFile {
   return {
     version: 2,
     activeProfileId: DEFAULT_CLAUDE_OAUTH_PROVIDER_ID,
+    activeProfileIds: createDefaultActiveProfileIds(),
     profiles: createBuiltinProfiles(),
   };
 }
@@ -252,6 +299,7 @@ function migrateLegacyMeta(meta: LegacyProviderProfilesMetaFile): ProviderProfil
     legacyAnthropic.activeProfileId === 'anthropic-subscription-default' || !legacyAnthropic.activeProfileId
       ? DEFAULT_CLAUDE_OAUTH_PROVIDER_ID
       : legacyAnthropic.activeProfileId;
+  setActiveProfile(next, 'anthropic', next.activeProfileId);
   return next;
 }
 
@@ -326,10 +374,44 @@ function normalizeMeta(
   });
 
   next.profiles = normalizedProfiles;
-  if (!next.activeProfileId || !byId.has(next.activeProfileId)) {
-    next.activeProfileId = DEFAULT_CLAUDE_OAUTH_PROVIDER_ID;
+  const rawActiveProfileIds = (next as Partial<ProviderProfilesMetaFile>).activeProfileIds;
+  const normalizedActiveProfileIds = createDefaultActiveProfileIds();
+  if (rawActiveProfileIds && typeof rawActiveProfileIds === 'object') {
+    for (const protocol of Object.keys(PROTOCOL_DEFAULT_PROFILE_IDS) as ProviderProfileProtocol[]) {
+      const selectedId = rawActiveProfileIds[protocol];
+      if (selectedId == null) {
+        normalizedActiveProfileIds[protocol] = null;
+        continue;
+      }
+      const matched = byId.get(selectedId);
+      if (matched?.protocol === protocol) {
+        normalizedActiveProfileIds[protocol] = matched.id;
+      } else {
+        dirty = true;
+      }
+    }
+  } else {
     dirty = true;
   }
+
+  if (next.activeProfileId && byId.has(next.activeProfileId)) {
+    const legacyActive = byId.get(next.activeProfileId)!;
+    if (normalizedActiveProfileIds[legacyActive.protocol] !== legacyActive.id) {
+      normalizedActiveProfileIds[legacyActive.protocol] = legacyActive.id;
+      if (!rawActiveProfileIds) dirty = true;
+    }
+  }
+
+  for (const protocol of Object.keys(PROTOCOL_DEFAULT_PROFILE_IDS) as ProviderProfileProtocol[]) {
+    const selectedId = normalizedActiveProfileIds[protocol];
+    const selected = selectedId ? byId.get(selectedId) : undefined;
+    if (selectedId && selected?.protocol === protocol) continue;
+    normalizedActiveProfileIds[protocol] = findProtocolFallbackProfileId(next, protocol);
+    dirty = true;
+  }
+
+  next.activeProfileIds = normalizedActiveProfileIds;
+  syncLegacyActiveProfileId(next);
   return { value: next, dirty };
 }
 
@@ -401,8 +483,10 @@ function toViewProfile(profile: ProviderProfileMeta, secrets: ProviderProfilesSe
 }
 
 function toView(meta: ProviderProfilesMetaFile, secrets: ProviderProfilesSecretsFile): ProviderProfilesView {
+  const activeProfileIds = ensureActiveProfileIds(meta);
   return {
     activeProfileId: meta.activeProfileId,
+    activeProfileIds: { ...activeProfileIds },
     providers: meta.profiles.map((profile) => toViewProfile(profile, secrets)),
   };
 }
@@ -425,17 +509,6 @@ function assertProviderSelector(profile: ProviderProfileMeta, selector: Provider
   if (!isKnownProtocol(selector) && selector !== profile.id && selector !== profile.provider) {
     throw new Error('profile not found');
   }
-}
-
-function resolveAnthropicCandidate(meta: ProviderProfilesMetaFile, secrets: ProviderProfilesSecretsFile) {
-  const fallback =
-    meta.profiles.find((profile) => profile.id === DEFAULT_CLAUDE_OAUTH_PROVIDER_ID) ??
-    createBuiltinProfiles().find((profile) => profile.id === DEFAULT_CLAUDE_OAUTH_PROVIDER_ID)!;
-  const active = meta.profiles.find((profile) => profile.id === meta.activeProfileId);
-  if (!active || active.protocol !== 'anthropic') {
-    return { profile: fallback, apiKey: secrets.profiles[fallback.id]?.apiKey };
-  }
-  return { profile: active, apiKey: secrets.profiles[active.id]?.apiKey };
 }
 
 export async function readProviderProfiles(projectRoot: string): Promise<ProviderProfilesView> {
@@ -478,7 +551,7 @@ export async function createProviderProfile(
 
   meta.profiles.push(profile);
   if (input.setActive) {
-    meta.activeProfileId = profile.id;
+    setActiveProfile(meta, profile.protocol, profile.id);
   }
   await writeRaw(metaPath, secretsPath, meta, secrets);
   return toViewProfile(profile, secrets);
@@ -551,7 +624,7 @@ export async function activateProviderProfile(
   const profile = findProfile(meta, profileId);
   if (!profile) throw new Error('profile not found');
   assertProviderSelector(profile, provider);
-  meta.activeProfileId = profileId;
+  setActiveProfile(meta, profile.protocol, profileId);
   await writeRaw(metaPath, secretsPath, meta, secrets);
 }
 
@@ -570,8 +643,11 @@ export async function deleteProviderProfile(
 
   meta.profiles = meta.profiles.filter((item) => item.id !== profileId);
   delete secrets.profiles[profileId];
-  if (meta.activeProfileId === profileId) {
-    meta.activeProfileId = DEFAULT_CLAUDE_OAUTH_PROVIDER_ID;
+  const activeProfileIds = ensureActiveProfileIds(meta);
+  if (activeProfileIds[profile.protocol] === profileId) {
+    setActiveProfile(meta, profile.protocol, findProtocolFallbackProfileId(meta, profile.protocol));
+  } else {
+    syncLegacyActiveProfileId(meta);
   }
   await writeRaw(metaPath, secretsPath, meta, secrets);
 }
@@ -589,42 +665,16 @@ export async function getProviderProfile(
   return toViewProfile(profile, secrets);
 }
 
-export async function resolveAnthropicRuntimeProfile(projectRoot: string): Promise<AnthropicRuntimeProfile> {
-  const { meta, secrets, metaPath, secretsPath, dirty } = await readRaw(projectRoot);
-  if (dirty) await writeRaw(metaPath, secretsPath, meta, secrets);
-  const { profile, apiKey } = resolveAnthropicCandidate(meta, secrets);
-
-  if (profile.authType === 'api_key' && apiKey && profile.baseUrl) {
-    return {
-      id: profile.id,
-      mode: 'api_key',
-      baseUrl: profile.baseUrl,
-      apiKey,
-      ...(profile.modelOverride ? { modelOverride: profile.modelOverride } : {}),
-    };
-  }
-
-  return {
-    id: DEFAULT_CLAUDE_OAUTH_PROVIDER_ID,
-    mode: 'subscription',
-    ...(profile.modelOverride ? { modelOverride: profile.modelOverride } : {}),
-  };
-}
-
-export async function resolveAnthropicRuntimeProfileById(
-  projectRoot: string,
-  profileId: string,
-): Promise<AnthropicRuntimeProfile | null> {
-  const { meta, secrets, metaPath, secretsPath, dirty } = await readRaw(projectRoot);
-  if (dirty) await writeRaw(metaPath, secretsPath, meta, secrets);
-  const profile = findProfile(meta, profileId);
-  if (!profile || profile.protocol !== 'anthropic') return null;
-
+function toRuntimeProviderProfile(
+  profile: ProviderProfileMeta,
+  secrets: ProviderProfilesSecretsFile,
+): RuntimeProviderProfile | null {
   if (profile.authType === 'api_key') {
     const apiKey = secrets.profiles[profile.id]?.apiKey;
     if (!apiKey || !profile.baseUrl) return null;
     return {
       id: profile.id,
+      protocol: profile.protocol,
       mode: 'api_key',
       baseUrl: profile.baseUrl,
       apiKey,
@@ -634,7 +684,84 @@ export async function resolveAnthropicRuntimeProfileById(
 
   return {
     id: profile.id,
+    protocol: profile.protocol,
     mode: 'subscription',
     ...(profile.modelOverride ? { modelOverride: profile.modelOverride } : {}),
+  };
+}
+
+function resolveRuntimeProviderCandidate(
+  meta: ProviderProfilesMetaFile,
+  secrets: ProviderProfilesSecretsFile,
+  protocol: ProviderProfileProtocol,
+  preferredProfileId?: string,
+): RuntimeProviderProfile | null {
+  const activeProfileIds = ensureActiveProfileIds(meta);
+  const candidates = [preferredProfileId, activeProfileIds[protocol], findProtocolFallbackProfileId(meta, protocol)].filter(
+    (id): id is string => Boolean(id),
+  );
+  const seen = new Set<string>();
+  for (const id of candidates) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const profile = findProfile(meta, id);
+    if (!profile || profile.protocol !== protocol) continue;
+    const runtime = toRuntimeProviderProfile(profile, secrets);
+    if (runtime) return runtime;
+  }
+  return null;
+}
+
+export async function resolveRuntimeProviderProfile(
+  projectRoot: string,
+  protocol: ProviderProfileProtocol,
+  preferredProfileId?: string,
+): Promise<RuntimeProviderProfile | null> {
+  const { meta, secrets, metaPath, secretsPath, dirty } = await readRaw(projectRoot);
+  if (dirty) await writeRaw(metaPath, secretsPath, meta, secrets);
+  return resolveRuntimeProviderCandidate(meta, secrets, protocol, preferredProfileId);
+}
+
+export async function resolveRuntimeProviderProfileById(
+  projectRoot: string,
+  profileId: string,
+): Promise<RuntimeProviderProfile | null> {
+  const { meta, secrets, metaPath, secretsPath, dirty } = await readRaw(projectRoot);
+  if (dirty) await writeRaw(metaPath, secretsPath, meta, secrets);
+  const profile = findProfile(meta, profileId);
+  if (!profile) return null;
+  return toRuntimeProviderProfile(profile, secrets);
+}
+
+export async function resolveAnthropicRuntimeProfile(projectRoot: string): Promise<AnthropicRuntimeProfile> {
+  const runtime =
+    (await resolveRuntimeProviderProfile(projectRoot, 'anthropic')) ??
+    ({
+      id: DEFAULT_CLAUDE_OAUTH_PROVIDER_ID,
+      protocol: 'anthropic',
+      mode: 'subscription',
+    } satisfies RuntimeProviderProfile);
+
+  return {
+    id: runtime.id,
+    mode: runtime.mode,
+    ...(runtime.baseUrl ? { baseUrl: runtime.baseUrl } : {}),
+    ...(runtime.apiKey ? { apiKey: runtime.apiKey } : {}),
+    ...(runtime.modelOverride ? { modelOverride: runtime.modelOverride } : {}),
+  };
+}
+
+export async function resolveAnthropicRuntimeProfileById(
+  projectRoot: string,
+  profileId: string,
+): Promise<AnthropicRuntimeProfile | null> {
+  const runtime = await resolveRuntimeProviderProfileById(projectRoot, profileId);
+  if (!runtime || runtime.protocol !== 'anthropic') return null;
+  return {
+    id: runtime.id,
+    mode: runtime.mode,
+    ...(runtime.baseUrl ? { baseUrl: runtime.baseUrl } : {}),
+    ...(runtime.apiKey ? { apiKey: runtime.apiKey } : {}),
+    ...(runtime.modelOverride ? { modelOverride: runtime.modelOverride } : {}),
   };
 }

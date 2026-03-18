@@ -66,6 +66,9 @@ describe('provider profiles routes', () => {
       const list = listRes.json();
       assert.ok(Array.isArray(list.providers));
       assert.equal(list.activeProfileId, created.profile.id);
+      assert.equal(list.activeProfileIds.anthropic, created.profile.id);
+      assert.equal(list.activeProfileIds.openai, 'codex-oauth');
+      assert.equal(list.activeProfileIds.google, 'gemini-oauth');
       assert.deepEqual(
         list.providers.slice(0, 3).map((profile) => profile.id),
         ['claude-oauth', 'codex-oauth', 'gemini-oauth'],
