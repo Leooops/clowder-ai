@@ -74,12 +74,16 @@ STALE_API=$(grep -rn "'3002'\|'3003'" \
     packages/api/src/index.ts \
     packages/api/src/config/ConfigRegistry.ts \
     packages/api/src/config/env-registry.ts \
+    packages/api/src/config/frontend-origin.ts \
     packages/api/src/domains/cats/services/agents/routing/AgentRouter.ts \
+    packages/api/src/infrastructure/connectors/connector-gateway-bootstrap.ts \
+    packages/api/src/config/governance/governance-pack.ts \
     packages/mcp-server/src/constants.ts \
     packages/web/src/utils/api-client.ts \
     2>/dev/null | grep -v node_modules | grep -v '\.test\.' | grep -v '// ' \
     | grep -v 'FRONTEND_PORT' | grep -v 'FRONTEND_BASE_URL' \
-    | grep -v "defaultValue: '${CANONICAL_FRONTEND}'" || true)
+    | grep -v "defaultValue: '${CANONICAL_FRONTEND}'" \
+    | grep -v "DEFAULT_FRONTEND" || true)
 
 if [ -n "$STALE_API" ]; then
     echo "FAIL: Found stale API port references (should be ${CANONICAL_API}):"
@@ -98,6 +102,22 @@ STALE_REDIS=$(grep -rn "localhost:6379" \
 if [ -n "$STALE_REDIS" ]; then
     echo "FAIL: Found stale Redis port references (should be ${CANONICAL_REDIS}):"
     echo "$STALE_REDIS" | head -20
+    ERRORS=$((ERRORS + 1))
+fi
+
+# --- Docs: stale port references ---
+echo "Scanning docs for stale port references..."
+
+# Exclude lines that mention old ports only as comparisons (e.g. "separate from X on 6379")
+STALE_DOC_REDIS=$(grep -rn '6379\|6380' \
+    SETUP.md \
+    CONTRIBUTING.md \
+    SECURITY.md \
+    2>/dev/null | grep -v '// ' | grep -v 'separate from' | grep -v 'instead of' || true)
+
+if [ -n "$STALE_DOC_REDIS" ]; then
+    echo "FAIL: Found stale Redis port in docs (should be ${CANONICAL_REDIS}):"
+    echo "$STALE_DOC_REDIS" | head -20
     ERRORS=$((ERRORS + 1))
 fi
 

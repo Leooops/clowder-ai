@@ -236,6 +236,15 @@ kill_port() {
 }
 
 # Anti-self-TERM guard: refuse to kill a running runtime worktree (F115 KD-5)
+# Resolves the configured runtime directory for detection.
+_resolve_runtime_dir() {
+    if [ -n "${CAT_CAFE_RUNTIME_DIR:-}" ]; then
+        echo "$CAT_CAFE_RUNTIME_DIR"
+    else
+        echo "$(cd "$(dirname "$0")/../.." && pwd)/cat-cafe-runtime"
+    fi
+}
+
 guard_runtime_port() {
     local port=$1
     local name=$2
@@ -247,11 +256,15 @@ guard_runtime_port() {
         return 0  # explicit override
     fi
 
+    local runtime_dir
+    runtime_dir=$(_resolve_runtime_dir)
+
     local pid cwd
     for pid in $pids; do
-        cwd=$(lsof -p "$pid" -Fn 2>/dev/null | grep '^ncwd' | sed 's/^n//' || true)
+        # lsof -Fn emits "fcwd" then "n/path" on the next line
+        cwd=$(lsof -p "$pid" -Fn 2>/dev/null | awk '/^fcwd/{getline; sub(/^n/,""); print; exit}' || true)
         [ -n "$cwd" ] || continue
-        if echo "$cwd" | grep -q "cat-cafe-runtime"; then
+        if echo "$cwd" | grep -qF "$runtime_dir"; then
             echo ""
             echo -e "${RED}✗ 端口 $port ($name) 被 runtime worktree 占用 (PID $pid)${NC}"
             echo "  runtime 路径: $cwd"
