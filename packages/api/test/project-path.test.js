@@ -44,15 +44,15 @@ describe('isUnderAllowedRoot', () => {
 });
 
 describe('getDefaultRootsForPlatform', () => {
-  it('includes detected Windows drive roots by default', () => {
+  it('keeps Windows defaults scoped to the user home directory', () => {
     const roots = getDefaultRootsForPlatform('win32', {
       homeDir: 'C:\\Users\\share',
       pathExists: (target) => target === 'C:\\' || target === 'D:\\',
     });
-    assert.ok(roots.includes('C:\\Users\\share'));
-    assert.ok(roots.includes('C:\\'));
-    assert.ok(roots.includes('D:\\'));
-    assert.ok(!roots.includes('E:\\'));
+    assert.deepStrictEqual(roots, ['C:\\Users\\share']);
+    assert.strictEqual(isPathUnderRoots('C:\\Users\\share\\repo', roots, 'win32'), true);
+    assert.strictEqual(isPathUnderRoots('C:\\Windows', roots, 'win32'), false);
+    assert.strictEqual(isPathUnderRoots('D:\\other-user', roots, 'win32'), false);
   });
 });
 

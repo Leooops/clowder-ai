@@ -6,7 +6,6 @@
  * 被 projects.ts, threads.ts, AgentRouter.ts 复用。
  */
 
-import { existsSync } from 'node:fs';
 import { realpath, stat } from 'node:fs/promises';
 import { homedir, platform } from 'node:os';
 import { delimiter, relative, resolve, win32 } from 'node:path';
@@ -25,14 +24,9 @@ export function getDefaultRootsForPlatform(
   opts?: { homeDir?: string; pathExists?: (targetPath: string) => boolean },
 ): string[] {
   const homeDir = opts?.homeDir ?? homedir();
-  const pathExists = opts?.pathExists ?? existsSync;
   const roots = new Set<string>([homeDir]);
 
   if (platformName === 'win32') {
-    for (const letter of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') {
-      const driveRoot = `${letter}:\\`;
-      if (pathExists(driveRoot)) roots.add(driveRoot);
-    }
     return [...roots];
   }
 

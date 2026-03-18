@@ -8,7 +8,7 @@
 import { execFile } from 'node:child_process';
 import { readdir, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { basename, dirname, resolve } from 'node:path';
+import { basename, dirname, posix, resolve, win32 } from 'node:path';
 import { promisify } from 'node:util';
 import type { FastifyPluginAsync } from 'fastify';
 import { getAllowedRoots, isUnderAllowedRoot, validateProjectPath } from '../utils/project-path.js';
@@ -57,6 +57,34 @@ export function getPickDirectoryCommand(platformName = process.platform): Native
     default:
       return null;
   }
+}
+
+function getPathApi(platformName = process.platform) {
+  return platformName === 'win32' ? win32 : posix;
+}
+
+export function splitProjectCompletePrefix(
+  prefix: string,
+  cwd: string,
+  platformName = process.platform,
+): { parentDir: string; fragment: string } {
+  const pathApi = getPathApi(platformName);
+  const expandedPrefix =
+    prefix.startsWith('~/') || (platformName === 'win32' && prefix.startsWith('~\\'))
+      ? homedir() + prefix.slice(1)
+      : prefix;
+  const absPrefix = pathApi.resolve(cwd, expandedPrefix);
+  const hasTrailingSeparator = platformName === 'win32' ? /[\\/]$/.test(prefix) : prefix.endsWith('/');
+  return {
+    parentDir: hasTrailingSeparator ? absPrefix : pathApi.dirname(absPrefix),
+    fragment: hasTrailingSeparator ? '' : pathApi.basename(absPrefix),
+  };
+}
+
+export function getProjectBrowseParent(validatedPath: string, platformName = process.platform): string | null {
+  const pathApi = getPathApi(platformName);
+  const parent = pathApi.dirname(validatedPath);
+  return parent === validatedPath ? null : parent;
 }
 
 /**
@@ -148,12 +176,7 @@ export const projectsRoutes: FastifyPluginAsync = async (app) => {
 
     // Resolve prefix: expand ~ to homedir, then resolve relative paths
     const cwd = query.cwd || process.cwd();
-    const expandedPrefix = prefix.startsWith('~/') ? homedir() + prefix.slice(1) : prefix;
-    const absPrefix = resolve(cwd, expandedPrefix);
-
-    // Split into parent directory + name fragment
-    const parentDir = prefix.endsWith('/') ? absPrefix : dirname(absPrefix);
-    const fragment = prefix.endsWith('/') ? '' : basename(absPrefix);
+    const { parentDir, fragment } = splitProjectCompletePrefix(prefix, cwd);
 
     // Validate parent directory
     const validatedParent = await validateProjectPath(parentDir);
@@ -233,9 +256,7 @@ export const projectsRoutes: FastifyPluginAsync = async (app) => {
       dirs.sort((a, b) => a.name.localeCompare(b.name));
 
       // Compute parent (use validatedPath which is already canonicalized)
-      const parentParts = validatedPath.split('/');
-      parentParts.pop();
-      const parent = parentParts.length > 0 ? parentParts.join('/') || '/' : null;
+      const parent = getProjectBrowseParent(validatedPath);
       const canGoUp = parent !== null && isUnderAllowedRoot(parent);
 
       return {

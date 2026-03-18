@@ -63,6 +63,21 @@ describe('normalizePickedDirectoryPath()', () => {
   });
 });
 
+describe('splitProjectCompletePrefix()', () => {
+  it('treats a trailing backslash as a directory prefix on Windows', () => {
+    const result = mod.splitProjectCompletePrefix('C:\\Users\\alice\\repo\\', 'C:\\Users\\alice', 'win32');
+    assert.equal(result.parentDir, 'C:\\Users\\alice\\repo');
+    assert.equal(result.fragment, '');
+  });
+});
+
+describe('getProjectBrowseParent()', () => {
+  it('returns the parent path for Windows browse results', () => {
+    assert.equal(mod.getProjectBrowseParent('C:\\Users\\alice\\repo', 'win32'), 'C:\\Users\\alice');
+    assert.equal(mod.getProjectBrowseParent('C:\\', 'win32'), null);
+  });
+});
+
 describe('POST /api/projects/pick-directory', () => {
   it('returns 401 without identity header', async () => {
     const app = await buildApp();
