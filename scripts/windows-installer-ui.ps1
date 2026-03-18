@@ -179,9 +179,11 @@ function Resolve-InstallerRedisPlan {
         $redisOptions = @()
         if ($defaultRedisUrl) {
             $redisOptions += @{ Label = "&Keep external ($defaultRedisUrl)"; Help = "Keep the current external Redis URL"; Value = "keep_external" }
+        } elseif ($anyRedisUrl) {
+            $redisOptions += @{ Label = "&Keep current Redis ($anyRedisUrl)"; Help = "Keep the current local Redis URL with its credentials"; Value = "keep_local" }
         }
         $redisOptions += @(
-            @{ Label = if ($defaultRedisUrl) { "&Install Redis locally" } else { "&Install Redis locally (recommended)" }; Help = "Download or reuse the project-local portable Redis bundle"; Value = "portable" },
+            @{ Label = if ($defaultRedisUrl -or $anyRedisUrl) { "&Install Redis locally" } else { "&Install Redis locally (recommended)" }; Help = "Download or reuse the project-local portable Redis bundle"; Value = "portable" },
             @{ Label = "&Use external Redis URL"; Help = "Use an existing external Redis instance"; Value = "external" }
         )
         Select-InstallerChoice -Title "Redis setup" -Prompt "Choose how this workspace should store runtime data" -Options $redisOptions
