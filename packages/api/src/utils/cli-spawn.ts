@@ -5,7 +5,7 @@
 
 import { spawn as nodeSpawn } from 'node:child_process';
 import { resolveCliTimeoutMs } from './cli-timeout.js';
-import { escapeCmdArg, resolveCmdShimScript } from './cli-spawn-win.js';
+import { escapeCmdArg, resolveWindowsShimSpawn } from './cli-spawn-win.js';
 import type { ChildProcessLike, CliSpawnOptions, SpawnFn } from './cli-types.js';
 import { isParseError, parseNDJSON } from './ndjson-parser.js';
 import { ProcessLivenessProbe } from './ProcessLivenessProbe.js';
@@ -388,10 +388,10 @@ function defaultSpawn(
   },
 ): ChildProcessLike {
   if (IS_WINDOWS) {
-    const shimScript = resolveCmdShimScript(command);
-    if (shimScript) {
+    const shimSpawn = resolveWindowsShimSpawn(command, args);
+    if (shimSpawn) {
       // Direct node invocation — no shell needed
-      return nodeSpawn('node', [shimScript, ...args], {
+      return nodeSpawn(shimSpawn.command, shimSpawn.args, {
         cwd: options.cwd,
         env: options.env,
         stdio: options.stdio,

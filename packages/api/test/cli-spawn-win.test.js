@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-const { resolveCmdShimScript, escapeCmdArg } = await import('../dist/utils/cli-spawn-win.js');
+const { resolveCmdShimScript, resolveWindowsShimSpawn, escapeCmdArg } = await import('../dist/utils/cli-spawn-win.js');
 
 test('resolveCmdShimScript supports %dp0 shims and keeps scanning where results until one resolves', () => {
   const tempRoot = mkdtempSync(join(tmpdir(), 'cli-spawn-win-'));
@@ -70,6 +70,57 @@ test('resolveCmdShimScript ignores the node.exe prelude and resolves the real sc
     process.env.PATH = originalPath;
     rmSync(tempRoot, { recursive: true, force: true });
   }
+});
+
+test('resolveCmdShimScript prefers the shim selected by PATH over APPDATA fallback scripts', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'cli-spawn-win-path-first-'));
+  const originalPath = process.env.PATH;
+  const originalAppData = process.env.APPDATA;
+  const fakeBin = join(tempRoot, 'bin');
+  const shimDir = join(tempRoot, 'custom-prefix');
+  const appDataDir = join(tempRoot, 'appdata');
+
+  mkdirSync(fakeBin, { recursive: true });
+  mkdirSync(join(shimDir, 'node_modules', '@openai', 'codex', 'bin'), { recursive: true });
+  mkdirSync(join(appDataDir, 'npm', 'node_modules', '@openai', 'codex', 'bin'), { recursive: true });
+
+  const cmdPath = join(shimDir, 'codex.cmd');
+  const pathSelectedScript = join(shimDir, 'node_modules', '@openai', 'codex', 'bin', 'codex.js');
+  const appDataFallbackScript = join(appDataDir, 'npm', 'node_modules', '@openai', 'codex', 'bin', 'codex.js');
+  const whereScript = join(fakeBin, 'where');
+
+  writeFileSync(cmdPath, '@"%dp0\\node_modules\\@openai\\codex\\bin\\codex.js" %*\n', 'utf8');
+  writeFileSync(pathSelectedScript, 'console.log("path-selected");\n', 'utf8');
+  writeFileSync(appDataFallbackScript, 'console.log("appdata-fallback");\n', 'utf8');
+  writeFileSync(whereScript, `#!/bin/sh\nprintf '%s\n' '${cmdPath}'\n`, 'utf8');
+  chmodSync(whereScript, 0o755);
+
+  try {
+    process.env.APPDATA = appDataDir;
+    process.env.PATH = `${fakeBin}:${originalPath ?? ''}`;
+
+    const resolved = resolveCmdShimScript('codex');
+    assert.equal(resolved, pathSelectedScript);
+  } finally {
+    process.env.PATH = originalPath;
+    if (originalAppData === undefined) {
+      delete process.env.APPDATA;
+    } else {
+      process.env.APPDATA = originalAppData;
+    }
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('resolveWindowsShimSpawn uses the current Node executable for direct shim launches', () => {
+  const shimScript = join(tmpdir(), 'codex-shim-target.js');
+
+  const resolved = resolveWindowsShimSpawn('codex', ['--json'], shimScript);
+
+  assert.deepEqual(resolved, {
+    command: process.execPath,
+    args: [shimScript, '--json'],
+  });
 });
 
 test('escapeCmdArg passes through simple arguments unchanged', () => {

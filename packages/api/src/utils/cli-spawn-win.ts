@@ -25,32 +25,24 @@ const KNOWN_SHIM_SCRIPTS: Record<string, string[]> = {
   gemini: ['@google/gemini-cli/bin/gemini.js'],
 };
 
+export interface WindowsShimSpawn {
+  command: string;
+  args: string[];
+}
+
 /**
  * Resolve the underlying .js entry script from a Windows .cmd shim.
  *
  * Strategy:
- * 1. Check known paths under %APPDATA%/npm/node_modules
- * 2. Locate the .cmd via `where`, parse %dp0% relative paths
+ * 1. Locate the .cmd selected by PATH via `where`, parse %dp0% relative paths
+ * 2. Fall back to known paths under %APPDATA%/npm/node_modules
  * 3. Cache result (null = not resolvable, use shell fallback)
  */
 export function resolveCmdShimScript(command: string): string | null {
   const cached = resolvedShimCache.get(command);
   if (cached !== undefined) return cached;
 
-  // Strategy 1: known paths
-  const appData = process.env.APPDATA;
-  const knownPaths = KNOWN_SHIM_SCRIPTS[command];
-  if (appData && knownPaths) {
-    for (const relPath of knownPaths) {
-      const candidate = join(appData, 'npm', 'node_modules', relPath);
-      if (existsSync(candidate)) {
-        resolvedShimCache.set(command, candidate);
-        return candidate;
-      }
-    }
-  }
-
-  // Strategy 2: parse .cmd shim via `where`
+  // Strategy 1: parse the .cmd shim selected by PATH via `where`
   try {
     const whereOutput = execSync(`where ${command}.cmd`, {
       encoding: 'utf-8',
@@ -75,8 +67,34 @@ export function resolveCmdShimScript(command: string): string | null {
     // `where` failed or timed out — fall through to shell mode
   }
 
+  // Strategy 2: known paths as a fallback when PATH probing fails
+  const appData = process.env.APPDATA;
+  const knownPaths = KNOWN_SHIM_SCRIPTS[command];
+  if (appData && knownPaths) {
+    for (const relPath of knownPaths) {
+      const candidate = join(appData, 'npm', 'node_modules', relPath);
+      if (existsSync(candidate)) {
+        resolvedShimCache.set(command, candidate);
+        return candidate;
+      }
+    }
+  }
+
   resolvedShimCache.set(command, null);
   return null;
+}
+
+export function resolveWindowsShimSpawn(
+  command: string,
+  args: readonly string[],
+  shimScriptOverride?: string,
+): WindowsShimSpawn | null {
+  const shimScript = shimScriptOverride ?? resolveCmdShimScript(command);
+  if (!shimScript) return null;
+  return {
+    command: process.execPath,
+    args: [shimScript, ...args],
+  };
 }
 
 /**
