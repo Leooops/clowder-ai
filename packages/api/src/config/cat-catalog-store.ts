@@ -141,7 +141,7 @@ function readSeedMetadata(projectRoot: string): {
 function resolveLegacySeedBindingBackfill(
   projectRoot: string,
   catalog: CatCafeConfig,
-  bootstrapBindings: Record<string, BootstrapBinding | undefined>,
+  _bootstrapBindings: Record<string, BootstrapBinding | undefined>,
 ): Map<string, string> {
   const { explicitSeedAccountRefs, seedCatIdsByClient } = readSeedMetadata(projectRoot);
   const backfill = new Map<string, string>();
@@ -178,7 +178,8 @@ function resolveLegacySeedBindingBackfill(
     const uniqueAccountRefs = new Set(bindings.map((binding) => binding.accountRef));
     if (uniqueAccountRefs.size <= 1) continue;
 
-    const inheritedAccountRef = fallbackAccountRefForClient(client, bootstrapBindings[client]);
+    const inheritedAccountRef = builtinAccountIdForClient(client);
+    if (!uniqueAccountRefs.has(inheritedAccountRef)) continue;
     for (const binding of bindings) {
       if (binding.accountRef !== inheritedAccountRef) {
         backfill.set(binding.catId, binding.accountRef);
