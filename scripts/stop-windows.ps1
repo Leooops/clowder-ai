@@ -51,43 +51,43 @@ if (Test-Path $envFile) {
 
 $configuredRedisUrl = if ($env:REDIS_URL) { $env:REDIS_URL.Trim() } else { Get-InstallerEnvValueFromFile -EnvFile $envFile -Key "REDIS_URL" }
 
+function Get-ManagedProcessId {
+    param([string]$ManagedPidFile)
+    if (-not $ManagedPidFile -or -not (Test-Path $ManagedPidFile)) {
+        return $null
+    }
+    try {
+        return [int](Get-Content $ManagedPidFile -TotalCount 1).Trim()
+    } catch {
+        return $null
+    }
+}
+
+function Get-ProcessCommandLine {
+    param([int]$ProcessId)
+    try {
+        $processInfo = Get-CimInstance Win32_Process -Filter "ProcessId = $ProcessId" -ErrorAction Stop
+        return $processInfo.CommandLine
+    } catch {
+        return $null
+    }
+}
+
+function Test-ClowderOwnedProcess {
+    param([int]$ProcessId, [string]$ClowderProjectRoot)
+    if (-not $ClowderProjectRoot) {
+        return $false
+    }
+    $commandLine = Get-ProcessCommandLine -ProcessId $ProcessId
+    if (-not $commandLine) {
+        return $false
+    }
+    $normalizedRoot = $ClowderProjectRoot.TrimEnd('\', '/') + '\'
+    return ($commandLine -like "*$normalizedRoot*") -or ($commandLine -like "*$ClowderProjectRoot`"*") -or ($commandLine -like "*$ClowderProjectRoot'*")
+}
+
 function Stop-PortProcess {
     param([int]$Port, [string]$Name, [string]$PidFile, [string]$ProjectRoot)
-    function Get-ManagedProcessId {
-        param([string]$ManagedPidFile)
-        if (-not $ManagedPidFile -or -not (Test-Path $ManagedPidFile)) {
-            return $null
-        }
-        try {
-            return [int](Get-Content $ManagedPidFile -TotalCount 1).Trim()
-        } catch {
-            return $null
-        }
-    }
-
-    function Get-ProcessCommandLine {
-        param([int]$ProcessId)
-        try {
-            $processInfo = Get-CimInstance Win32_Process -Filter "ProcessId = $ProcessId" -ErrorAction Stop
-            return $processInfo.CommandLine
-        } catch {
-            return $null
-        }
-    }
-
-    function Test-ClowderOwnedProcess {
-        param([int]$ProcessId, [string]$ClowderProjectRoot)
-        if (-not $ClowderProjectRoot) {
-            return $false
-        }
-        $commandLine = Get-ProcessCommandLine -ProcessId $ProcessId
-        if (-not $commandLine) {
-            return $false
-        }
-        $normalizedRoot = $ClowderProjectRoot.TrimEnd('\', '/') + '\'
-        return ($commandLine -like "*$normalizedRoot*") -or ($commandLine -like "*$ClowderProjectRoot`"*") -or ($commandLine -like "*$ClowderProjectRoot'*")
-    }
-
     $connections = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
     if ($connections) {
         $managedPid = Get-ManagedProcessId -ManagedPidFile $PidFile
@@ -121,6 +121,8 @@ Stop-PortProcess -Port $WebPort -Name "Frontend" -PidFile $WebPidFile -ProjectRo
 
 # Stop Redis if running on our port
 $redisCommands = $null
+$redisLayout = if ($ProjectRoot) { Resolve-PortableRedisLayout -ProjectRoot $ProjectRoot } else { $null }
+$redisPidFile = if ($redisLayout) { Join-Path $redisLayout.Data "redis-$RedisPort.pid" } else { $null }
 if ($ProjectRoot) {
     $redisCommands = Resolve-PortableRedisBinaries -ProjectRoot $ProjectRoot
 }
@@ -135,14 +137,34 @@ if ($configuredRedisUrl -and -not (Test-LocalRedisUrl -RedisUrl $configuredRedis
         if (-not $redisCommands -or -not $redisCommands.CliPath) {
             throw "redis-cli unavailable"
         }
-        $redisCli = $redisCommands.CliPath
-        $redisAuthArgs = Get-RedisAuthArgs -RedisUrl $configuredRedisUrl
-        $redisPing = & $redisCli -p $RedisPort @redisAuthArgs ping 2>$null
-        if ($redisPing -eq "PONG") {
-            & $redisCli -p $RedisPort @redisAuthArgs shutdown save 2>$null
-            Write-Ok "Redis stopped (port $RedisPort)"
-        } else {
+        $redisConnections = Get-NetTCPConnection -LocalPort $RedisPort -State Listen -ErrorAction SilentlyContinue
+        if (-not $redisConnections) {
             Write-Warn "Redis (port $RedisPort) - not running"
+        } else {
+            $managedRedisPid = Get-ManagedProcessId -ManagedPidFile $redisPidFile
+            $ownedRedisConnections = @()
+            foreach ($conn in $redisConnections) {
+                $isManagedPid = $managedRedisPid -and ($conn.OwningProcess -eq $managedRedisPid)
+                $isClowderOwned = $isManagedPid -or (Test-ClowderOwnedProcess -ProcessId $conn.OwningProcess -ClowderProjectRoot $ProjectRoot)
+                if (-not $isClowderOwned) {
+                    Write-Warn "Skipping non-Clowder Redis listener on port $RedisPort (PID $($conn.OwningProcess))"
+                    continue
+                }
+                $ownedRedisConnections += $conn
+            }
+            if ($ownedRedisConnections.Count -eq 0) {
+                Write-Warn "Redis (port $RedisPort) - no Clowder-owned listener found"
+            } else {
+                $redisCli = $redisCommands.CliPath
+                $redisAuthArgs = Get-RedisAuthArgs -RedisUrl $configuredRedisUrl
+                $redisPing = & $redisCli -p $RedisPort @redisAuthArgs ping 2>$null
+                if ($redisPing -eq "PONG") {
+                    & $redisCli -p $RedisPort @redisAuthArgs shutdown save 2>$null
+                    Write-Ok "Redis stopped (port $RedisPort)"
+                } else {
+                    Write-Warn "Redis (port $RedisPort) - not running"
+                }
+            }
         }
     } catch {
         Write-Warn "Redis (port $RedisPort) - not running"

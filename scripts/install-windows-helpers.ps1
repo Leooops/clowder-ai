@@ -425,6 +425,24 @@ function Remove-ClaudeInstallerProfile {
     Invoke-InstallerAuthHelper $State @("claude-profile", "remove", "--project-dir", $State.ProjectRoot)
 }
 
+function Read-InstallerSecret {
+    param([string]$Prompt)
+
+    $secureValue = Read-Host $Prompt -AsSecureString
+    if ($null -eq $secureValue) {
+        return ""
+    }
+
+    $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureValue)
+    try {
+        return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
+    } finally {
+        if ($bstr -ne [IntPtr]::Zero) {
+            [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+        }
+    }
+}
+
 function Configure-InstallerAuth {
     param([string]$ProjectRoot, $State)
 
@@ -455,7 +473,7 @@ function Configure-InstallerAuth {
         if ($choice -eq "keep") {
             Write-Ok "Claude: keeping existing configuration"
         } elseif ($choice -eq "api_key") {
-            $apiKey = Read-Host "    API Key"
+            $apiKey = Read-InstallerSecret "    API Key"
             $baseUrl = Read-Host "    Base URL (Enter = https://api.anthropic.com)"
             $model = Read-Host "    Model (Enter = default)"
             if ($apiKey) {
@@ -490,7 +508,7 @@ function Configure-InstallerAuth {
         if ($choice -eq "keep") {
             Write-Ok "Codex: keeping existing configuration"
         } elseif ($choice -eq "api_key") {
-            $apiKey = Read-Host "    API Key"
+            $apiKey = Read-InstallerSecret "    API Key"
             $baseUrl = Read-Host "    Base URL (Enter = default)"
             $model = Read-Host "    Model (Enter = default)"
             if ($apiKey) {
@@ -525,7 +543,7 @@ function Configure-InstallerAuth {
         if ($choice -eq "keep") {
             Write-Ok "Gemini: keeping existing configuration"
         } elseif ($choice -eq "api_key") {
-            $apiKey = Read-Host "    API Key"
+            $apiKey = Read-InstallerSecret "    API Key"
             $model = Read-Host "    Model (Enter = default)"
             if ($apiKey) {
                 Set-GeminiApiKeyMode $State $apiKey $model

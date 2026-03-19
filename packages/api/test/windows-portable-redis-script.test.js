@@ -212,6 +212,17 @@ test('Windows installer uses interactive selectors instead of typed or letter-ba
   assert.doesNotMatch(helpersScript, /Read-Host " {4}Choose \[1\/2\]/);
 });
 
+test('Windows installer masks provider API key prompts instead of echoing secrets', () => {
+  assert.match(helpersScript, /function Read-InstallerSecret/);
+  assert.match(helpersScript, /Read-Host \$Prompt -AsSecureString/);
+  assert.match(helpersScript, /SecureStringToBSTR/);
+  assert.match(helpersScript, /ZeroFreeBSTR/);
+
+  const apiPromptMatches = helpersScript.match(/\$apiKey = Read-InstallerSecret " {4}API Key"/g) ?? [];
+  assert.equal(apiPromptMatches.length, 3, 'expected Claude, Codex, and Gemini API key prompts to use masked input');
+  assert.doesNotMatch(helpersScript, /\$apiKey = Read-Host " {4}API Key"/);
+});
+
 test('Windows installer prefers npm before corepack when bootstrapping pnpm', () => {
   assert.match(installScript, /\$npmCommand = Resolve-ToolCommand -Name "npm"/);
   assert.match(installScript, /& \$npmCommand install -g pnpm 2>\$null/);
@@ -521,9 +532,15 @@ test('Windows CLI installs retry command discovery before warning and auth detec
 test('Windows stop script resolves redis-cli through the shared helper chain before shutdown', () => {
   assert.match(stopWindowsScript, /install-windows-helpers\.ps1/);
   assert.match(stopWindowsScript, /Resolve-PortableRedisBinaries -ProjectRoot \$ProjectRoot/);
+  assert.match(stopWindowsScript, /Resolve-PortableRedisLayout -ProjectRoot \$ProjectRoot/);
   assert.match(stopWindowsScript, /Resolve-GlobalRedisBinaries/);
   assert.match(stopWindowsScript, /\$redisCli = \$redisCommands\.CliPath/);
   assert.doesNotMatch(stopWindowsScript, /& redis-cli -p \$RedisPort ping/);
+  assert.match(stopWindowsScript, /\$redisPidFile = if \(\$redisLayout\) \{ Join-Path \$redisLayout\.Data "redis-\$RedisPort\.pid" \} else \{ \$null \}/);
+  assert.match(stopWindowsScript, /\$redisConnections = Get-NetTCPConnection -LocalPort \$RedisPort -State Listen -ErrorAction SilentlyContinue/);
+  assert.match(stopWindowsScript, /\$managedRedisPid = Get-ManagedProcessId -ManagedPidFile \$redisPidFile/);
+  assert.match(stopWindowsScript, /\$isClowderOwned = \$isManagedPid -or \(Test-ClowderOwnedProcess -ProcessId \$conn\.OwningProcess -ClowderProjectRoot \$ProjectRoot\)/);
+  assert.match(stopWindowsScript, /Write-Warn "Skipping non-Clowder Redis listener on port \$RedisPort/);
   // stop script must pass auth args from REDIS_URL to redis-cli (ping + shutdown)
   assert.match(stopWindowsScript, /Get-RedisAuthArgs\s+-RedisUrl\s+\$configuredRedisUrl/);
   assert.match(stopWindowsScript, /@redisAuthArgs\s+ping/);
