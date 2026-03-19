@@ -348,6 +348,21 @@ describe('HubQuotaBoardTab — account pool grouping', () => {
     expect(container.textContent).toContain('配额数据加载失败 (503)');
     expect(container.textContent).toContain('显示的可能是过期数据');
   });
+
+  it('shows a visible error banner when provider profiles fail to load', async () => {
+    mockApiFetch.mockImplementation((path: string) => {
+      if (path === '/api/provider-profiles') return Promise.resolve(new Response('{}', { status: 503 }));
+      return defaultQuotaApiFetch(path);
+    });
+
+    await act(async () => {
+      root.render(React.createElement(HubQuotaBoardTab));
+    });
+    await flushEffects();
+
+    expect(container.textContent).toContain('账号配置加载失败 (503)');
+    expect(container.textContent).toContain('额度池成员归属可能不完整');
+  });
 });
 
 describe('HubQuotaBoardTab — polling & notification', () => {

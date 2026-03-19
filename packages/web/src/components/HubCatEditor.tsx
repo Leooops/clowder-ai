@@ -161,7 +161,6 @@ export function HubCatEditor({ cat, draft, open, onClose, onSaved }: HubCatEdito
         if (!cancelled) {
           const fallback = toCodexRuntimeSettings();
           setCodexSettings((prev) => prev ?? fallback);
-          setCodexSettingsBaseline((prev) => prev ?? fallback);
           setCodexSettingsError(err instanceof Error ? err.message : 'Codex 运行参数加载失败');
         }
       })
@@ -317,10 +316,9 @@ export function HubCatEditor({ cat, draft, open, onClose, onSaved }: HubCatEdito
         }
       }
 
-      if (showCodexSettings && codexSettings) {
-        const codexBaseline = codexSettingsBaseline ?? toCodexRuntimeSettings();
-        const codexPatches = buildCodexConfigPatches(codexSettings, codexBaseline);
-        const rollbackCodexPatches = buildCodexConfigPatches(codexBaseline, codexSettings);
+      if (showCodexSettings && codexSettings && codexSettingsBaseline) {
+        const codexPatches = buildCodexConfigPatches(codexSettings, codexSettingsBaseline);
+        const rollbackCodexPatches = buildCodexConfigPatches(codexSettingsBaseline, codexSettings);
         const appliedConfigPatchKeys: string[] = [];
         for (const patch of codexPatches) {
           const configRes = await apiFetch('/api/config', {

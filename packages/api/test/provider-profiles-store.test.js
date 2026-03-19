@@ -67,6 +67,14 @@ describe('provider profile store', () => {
     });
   });
 
+  it('bootstraps the builtin Claude account with the canonical opus model id', async () => {
+    const data = await readProviderProfiles(projectRoot);
+    const claude = data.providers.find((profile) => profile.id === 'claude');
+    assert.ok(claude, 'builtin Claude account should exist');
+    assert.ok(claude.models.includes('claude-opus-4-6'));
+    assert.equal(claude.models.some((model) => model.includes('[1m]')), false);
+  });
+
   it('creates a client-agnostic api_key account and keeps secrets out of meta', async () => {
     const created = await createProviderProfile(projectRoot, {
       displayName: 'API Key Account 1',

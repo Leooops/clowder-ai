@@ -57,6 +57,7 @@ export function HubQuotaBoardTab() {
   const [quota, setQuota] = useState<QuotaResponse | null>(null);
   const [quotaError, setQuotaError] = useState<string | null>(null);
   const [profiles, setProfiles] = useState<ProviderProfilesResponse['providers']>([]);
+  const [profilesError, setProfilesError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const previousRiskRef = useRef<'ok' | 'warn' | 'high'>('ok');
@@ -86,17 +87,24 @@ export function HubQuotaBoardTab() {
 
   useEffect(() => {
     let cancelled = false;
+    setProfilesError(null);
     apiFetch('/api/provider-profiles')
       .then(async (res) => {
-        if (!res.ok) return null;
+        if (!res.ok) {
+          if (!cancelled) setProfilesError(`账号配置加载失败 (${res.status})，额度池成员归属可能不完整`);
+          return null;
+        }
         return (await res.json()) as ProviderProfilesResponse;
       })
       .then((body) => {
         if (!cancelled && body) {
           setProfiles(body.providers ?? []);
+          setProfilesError(null);
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) setProfilesError('账号配置加载失败，额度池成员归属可能不完整');
+      });
     return () => {
       cancelled = true;
     };
@@ -155,6 +163,7 @@ export function HubQuotaBoardTab() {
     ...new Set(
       [
         quotaError,
+        profilesError,
         refreshError,
         quota?.codex?.error,
         quota?.claude?.error,

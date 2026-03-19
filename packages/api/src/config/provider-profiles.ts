@@ -53,7 +53,7 @@ const BUILTIN_ACCOUNT_SPECS = [
     id: 'claude',
     displayName: 'Claude (OAuth)',
     client: 'anthropic',
-    models: ['claude-opus-4-6[1m]', 'claude-sonnet-4-6', 'claude-opus-4-5-20251101'],
+    models: ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-opus-4-5-20251101'],
   },
   {
     id: 'codex',
