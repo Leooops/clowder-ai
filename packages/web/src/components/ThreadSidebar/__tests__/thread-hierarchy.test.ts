@@ -34,6 +34,7 @@ describe('buildChildMap', () => {
 
   it('sorts children by lastActiveAt descending', () => {
     const threads = [
+      makeThread({ id: 'p' }),
       makeThread({ id: 'c1', parentThreadId: 'p', lastActiveAt: 10 }),
       makeThread({ id: 'c2', parentThreadId: 'p', lastActiveAt: 30 }),
       makeThread({ id: 'c3', parentThreadId: 'p', lastActiveAt: 20 }),
@@ -44,6 +45,8 @@ describe('buildChildMap', () => {
 
   it('handles multiple parents', () => {
     const threads = [
+      makeThread({ id: 'p1' }),
+      makeThread({ id: 'p2' }),
       makeThread({ id: 'c1', parentThreadId: 'p1' }),
       makeThread({ id: 'c2', parentThreadId: 'p2' }),
       makeThread({ id: 'c3', parentThreadId: 'p1' }),
@@ -53,6 +56,32 @@ describe('buildChildMap', () => {
     expect(map.get('p1')?.length).toBe(2);
     expect(map.get('p2')?.length).toBe(1);
   });
+
+  it('excludes children whose parent is not in the set (P1 orphan fix)', () => {
+    // Parent 'deleted-parent' is not in the thread list
+    const threads = [makeThread({ id: 'orphan', parentThreadId: 'deleted-parent' }), makeThread({ id: 'other' })];
+    const map = buildChildMap(threads);
+    expect(map.size).toBe(0); // orphan should NOT be nested
+  });
+
+  it('excludes pinned children from nesting (P2 fix)', () => {
+    const threads = [
+      makeThread({ id: 'parent' }),
+      makeThread({ id: 'pinned-child', parentThreadId: 'parent', pinned: true }),
+      makeThread({ id: 'normal-child', parentThreadId: 'parent' }),
+    ];
+    const map = buildChildMap(threads);
+    expect(map.get('parent')?.map((t) => t.id)).toEqual(['normal-child']);
+  });
+
+  it('excludes favorited children from nesting (P2 fix)', () => {
+    const threads = [
+      makeThread({ id: 'parent' }),
+      makeThread({ id: 'fav-child', parentThreadId: 'parent', favorited: true }),
+    ];
+    const map = buildChildMap(threads);
+    expect(map.size).toBe(0); // no children to nest
+  });
 });
 
 describe('getRootThreads', () => {
@@ -61,7 +90,7 @@ describe('getRootThreads', () => {
     expect(getRootThreads(threads)).toHaveLength(2);
   });
 
-  it('filters out child threads', () => {
+  it('filters out child threads whose parent exists', () => {
     const threads = [
       makeThread({ id: 'parent' }),
       makeThread({ id: 'child', parentThreadId: 'parent' }),
@@ -69,6 +98,31 @@ describe('getRootThreads', () => {
     ];
     const roots = getRootThreads(threads);
     expect(roots.map((t) => t.id)).toEqual(['parent', 'other']);
+  });
+
+  it('promotes orphan children to root when parent is missing (P1 fix)', () => {
+    const threads = [makeThread({ id: 'orphan', parentThreadId: 'deleted-parent' }), makeThread({ id: 'other' })];
+    const roots = getRootThreads(threads);
+    expect(roots.map((t) => t.id)).toEqual(['orphan', 'other']);
+  });
+
+  it('promotes pinned children to root (P2 fix)', () => {
+    const threads = [
+      makeThread({ id: 'parent' }),
+      makeThread({ id: 'pinned-child', parentThreadId: 'parent', pinned: true }),
+      makeThread({ id: 'normal-child', parentThreadId: 'parent' }),
+    ];
+    const roots = getRootThreads(threads);
+    expect(roots.map((t) => t.id)).toEqual(['parent', 'pinned-child']);
+  });
+
+  it('promotes favorited children to root (P2 fix)', () => {
+    const threads = [
+      makeThread({ id: 'parent' }),
+      makeThread({ id: 'fav-child', parentThreadId: 'parent', favorited: true }),
+    ];
+    const roots = getRootThreads(threads);
+    expect(roots.map((t) => t.id)).toEqual(['parent', 'fav-child']);
   });
 });
 

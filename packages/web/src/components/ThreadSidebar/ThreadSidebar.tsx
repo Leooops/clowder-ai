@@ -399,6 +399,65 @@ export function ThreadSidebar({ onClose, className, onBootcampClick }: ThreadSid
   const childMap = useMemo(() => buildChildMap(filteredThreads), [filteredThreads]);
   const rootThreads = useMemo(() => getRootThreads(filteredThreads), [filteredThreads]);
 
+  /** Render a thread with its expandable children inline. Shared by both group render sites. */
+  const renderThreadWithChildren = useCallback(
+    (t: Thread, indented: boolean) => {
+      const children = childMap.get(t.id);
+      const isParent = children && children.length > 0;
+      const expanded = hierarchyExpanded.has(t.id);
+      return (
+        <div key={t.id}>
+          <ThreadItem
+            id={t.id}
+            title={t.title}
+            participants={t.participants}
+            lastActiveAt={t.lastActiveAt}
+            isActive={currentThreadId === t.id}
+            onSelect={handleSelect}
+            onDelete={handleDeleteRequest}
+            onRename={handleRename}
+            onTogglePin={handleTogglePin}
+            onToggleFavorite={handleToggleFavorite}
+            onUpdatePreferredCats={handleUpdatePreferredCats}
+            isPinned={t.pinned}
+            isFavorited={t.favorited}
+            threadState={getThreadState(t.id)}
+            indented={indented}
+            preferredCats={t.preferredCats}
+            childCount={children?.length}
+            isExpanded={expanded}
+            onToggleExpand={isParent ? () => toggleHierarchy(t.id) : undefined}
+          />
+          {isParent &&
+            expanded &&
+            children.map((child) => (
+              <ThreadItem
+                key={child.id}
+                id={child.id}
+                title={child.title}
+                participants={child.participants}
+                lastActiveAt={child.lastActiveAt}
+                isActive={currentThreadId === child.id}
+                onSelect={handleSelect}
+                onDelete={handleDeleteRequest}
+                onRename={handleRename}
+                onTogglePin={handleTogglePin}
+                onToggleFavorite={handleToggleFavorite}
+                onUpdatePreferredCats={handleUpdatePreferredCats}
+                isPinned={child.pinned}
+                isFavorited={child.favorited}
+                threadState={getThreadState(child.id)}
+                preferredCats={child.preferredCats}
+                isChildThread
+              />
+            ))}
+        </div>
+      );
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [childMap, hierarchyExpanded, currentThreadId, getThreadState, toggleHierarchy],
+  );
+
   // F095 Phase B: Active workspace grouping
   const { pinnedProjects, toggleProjectPin } = useProjectPins();
   const threadGroups = useMemo(
@@ -574,59 +633,7 @@ export function ThreadSidebar({ onClose, className, onBootcampClick }: ThreadSid
                         onToggleProjectPin={sub.projectPath ? () => toggleProjectPin(sub.projectPath!) : undefined}
                         isProjectPinned={sub.projectPath ? pinnedProjects.has(sub.projectPath) : undefined}
                       >
-                        {sub.threads.map((t) => {
-                          const children = childMap.get(t.id);
-                          const isParent = children && children.length > 0;
-                          const expanded = hierarchyExpanded.has(t.id);
-                          return (
-                            <div key={t.id}>
-                              <ThreadItem
-                                id={t.id}
-                                title={t.title}
-                                participants={t.participants}
-                                lastActiveAt={t.lastActiveAt}
-                                isActive={currentThreadId === t.id}
-                                onSelect={handleSelect}
-                                onDelete={handleDeleteRequest}
-                                onRename={handleRename}
-                                onTogglePin={handleTogglePin}
-                                onToggleFavorite={handleToggleFavorite}
-                                onUpdatePreferredCats={handleUpdatePreferredCats}
-                                isPinned={t.pinned}
-                                isFavorited={t.favorited}
-                                threadState={getThreadState(t.id)}
-                                indented
-                                preferredCats={t.preferredCats}
-                                childCount={children?.length}
-                                isExpanded={expanded}
-                                onToggleExpand={isParent ? () => toggleHierarchy(t.id) : undefined}
-                              />
-                              {isParent &&
-                                expanded &&
-                                children.map((child) => (
-                                  <ThreadItem
-                                    key={child.id}
-                                    id={child.id}
-                                    title={child.title}
-                                    participants={child.participants}
-                                    lastActiveAt={child.lastActiveAt}
-                                    isActive={currentThreadId === child.id}
-                                    onSelect={handleSelect}
-                                    onDelete={handleDeleteRequest}
-                                    onRename={handleRename}
-                                    onTogglePin={handleTogglePin}
-                                    onToggleFavorite={handleToggleFavorite}
-                                    onUpdatePreferredCats={handleUpdatePreferredCats}
-                                    isPinned={child.pinned}
-                                    isFavorited={child.favorited}
-                                    threadState={getThreadState(child.id)}
-                                    preferredCats={child.preferredCats}
-                                    isChildThread
-                                  />
-                                ))}
-                            </div>
-                          );
-                        })}
+                        {sub.threads.map((t) => renderThreadWithChildren(t, true))}
                       </SectionGroup>
                     );
                   })}
@@ -651,59 +658,7 @@ export function ThreadSidebar({ onClose, className, onBootcampClick }: ThreadSid
                   group.type === 'project' && group.projectPath ? pinnedProjects.has(group.projectPath) : undefined
                 }
               >
-                {group.threads.map((t) => {
-                  const children = childMap.get(t.id);
-                  const isParent = children && children.length > 0;
-                  const expanded = hierarchyExpanded.has(t.id);
-                  return (
-                    <div key={t.id}>
-                      <ThreadItem
-                        id={t.id}
-                        title={t.title}
-                        participants={t.participants}
-                        lastActiveAt={t.lastActiveAt}
-                        isActive={currentThreadId === t.id}
-                        onSelect={handleSelect}
-                        onDelete={handleDeleteRequest}
-                        onRename={handleRename}
-                        onTogglePin={handleTogglePin}
-                        onToggleFavorite={handleToggleFavorite}
-                        onUpdatePreferredCats={handleUpdatePreferredCats}
-                        isPinned={t.pinned}
-                        isFavorited={t.favorited}
-                        threadState={getThreadState(t.id)}
-                        indented={group.type === 'project'}
-                        preferredCats={t.preferredCats}
-                        childCount={children?.length}
-                        isExpanded={expanded}
-                        onToggleExpand={isParent ? () => toggleHierarchy(t.id) : undefined}
-                      />
-                      {isParent &&
-                        expanded &&
-                        children.map((child) => (
-                          <ThreadItem
-                            key={child.id}
-                            id={child.id}
-                            title={child.title}
-                            participants={child.participants}
-                            lastActiveAt={child.lastActiveAt}
-                            isActive={currentThreadId === child.id}
-                            onSelect={handleSelect}
-                            onDelete={handleDeleteRequest}
-                            onRename={handleRename}
-                            onTogglePin={handleTogglePin}
-                            onToggleFavorite={handleToggleFavorite}
-                            onUpdatePreferredCats={handleUpdatePreferredCats}
-                            isPinned={child.pinned}
-                            isFavorited={child.favorited}
-                            threadState={getThreadState(child.id)}
-                            preferredCats={child.preferredCats}
-                            isChildThread
-                          />
-                        ))}
-                    </div>
-                  );
-                })}
+                {group.threads.map((t) => renderThreadWithChildren(t, group.type === 'project'))}
               </SectionGroup>
             );
           })}
