@@ -1,3 +1,4 @@
+import { accessSync, constants, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { findMonorepoRoot } from './monorepo-root.js';
 
@@ -8,7 +9,15 @@ import { findMonorepoRoot } from './monorepo-root.js';
 export function resolveActiveProjectRoot(start = process.cwd()): string {
   const templatePath = process.env.CAT_TEMPLATE_PATH?.trim();
   if (templatePath) {
-    return dirname(resolve(templatePath));
+    const resolvedTemplatePath = resolve(templatePath);
+    try {
+      if (statSync(resolvedTemplatePath).isFile()) {
+        accessSync(resolvedTemplatePath, constants.R_OK);
+        return dirname(resolvedTemplatePath);
+      }
+    } catch {
+      // Missing/unreadable templates should not redirect account/config lookups.
+    }
   }
   return findMonorepoRoot(start);
 }

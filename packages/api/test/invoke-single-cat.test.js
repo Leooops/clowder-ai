@@ -2603,6 +2603,62 @@ describe('invokeSingleCat audit events (P1 fix)', () => {
     assert.equal(callbackEnv.OPENAI_API_KEY, 'sk-template-openai');
   });
 
+  it('F127 P2: ignores unreadable CAT_TEMPLATE_PATH before switching account roots', async () => {
+    const { createProviderProfile } = await import('../dist/config/provider-profiles.js');
+    const staleTemplateRoot = await mkdtemp(join(tmpdir(), 'f127-stale-template-'));
+    const isolatedRepoRoot = await mkdtemp(join(tmpdir(), 'f127-isolated-repo-'));
+    const isolatedApiDir = join(isolatedRepoRoot, 'packages', 'api');
+    await mkdir(isolatedApiDir, { recursive: true });
+    await writeFile(join(isolatedRepoRoot, 'pnpm-workspace.yaml'), 'packages:\n  - "packages/*"\n', 'utf-8');
+
+    await createProviderProfile(staleTemplateRoot, {
+      provider: 'openai',
+      name: 'stale-openai',
+      mode: 'api_key',
+      authType: 'api_key',
+      protocol: 'openai',
+      apiKey: 'sk-stale-openai',
+      setActive: true,
+    });
+
+    const optionsSeen = [];
+    const service = {
+      async *invoke(_prompt, options) {
+        optionsSeen.push(options ?? {});
+        yield { type: 'done', catId: 'codex', timestamp: Date.now() };
+      },
+    };
+
+    const deps = makeDeps();
+    const previousTemplatePath = process.env.CAT_TEMPLATE_PATH;
+    const previousCwd = process.cwd();
+    try {
+      process.chdir(isolatedApiDir);
+      process.env.CAT_TEMPLATE_PATH = join(staleTemplateRoot, 'missing-template.json');
+      await collect(
+        invokeSingleCat(deps, {
+          catId: 'codex',
+          service,
+          prompt: 'test',
+          userId: 'user-f127-unreadable-template',
+          threadId: 'thread-f127-unreadable-template',
+          isLastCat: true,
+        }),
+      );
+    } finally {
+      process.chdir(previousCwd);
+      if (previousTemplatePath === undefined) delete process.env.CAT_TEMPLATE_PATH;
+      else process.env.CAT_TEMPLATE_PATH = previousTemplatePath;
+      await rm(staleTemplateRoot, { recursive: true, force: true });
+      await rm(isolatedRepoRoot, { recursive: true, force: true });
+    }
+
+    const callbackEnv = optionsSeen[0]?.callbackEnv ?? {};
+    assert.equal(callbackEnv.OPENAI_API_KEY, undefined);
+    assert.equal(callbackEnv.OPENAI_BASE_URL, undefined);
+    assert.equal(callbackEnv.OPENAI_API_BASE, undefined);
+  });
+
   it('F127 P1: prefers member-bound openai profile over protocol active profile', async () => {
     const { createProviderProfile } = await import('../dist/config/provider-profiles.js');
     const root = await mkdtemp(join(tmpdir(), 'f127-openai-profile-'));
