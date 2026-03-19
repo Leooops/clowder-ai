@@ -2812,6 +2812,80 @@ describe('invokeSingleCat audit events (P1 fix)', () => {
     assert.equal(callbackEnv.OPENAI_API_BASE, 'https://api.bound.example');
   });
 
+  it('F127 P1: explicit builtin codex bindings force oauth callback env', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'f127-openai-builtin-oauth-'));
+    const apiDir = join(root, 'packages', 'api');
+    await mkdir(apiDir, { recursive: true });
+    await writeFile(join(root, 'pnpm-workspace.yaml'), 'packages:\n  - "packages/*"\n', 'utf-8');
+
+    const originalCodexAuthMode = process.env.CODEX_AUTH_MODE;
+    const originalOpenAIApiKey = process.env.OPENAI_API_KEY;
+    const originalOpenAIBaseUrl = process.env.OPENAI_BASE_URL;
+    const originalOpenAIApiBase = process.env.OPENAI_API_BASE;
+    process.env.CODEX_AUTH_MODE = 'api_key';
+    process.env.OPENAI_API_KEY = 'sk-global-openai';
+    process.env.OPENAI_BASE_URL = 'https://api.global.example';
+    process.env.OPENAI_API_BASE = 'https://api.global.example';
+
+    const registrySnapshot = catRegistry.getAllConfigs();
+    const originalConfig = catRegistry.tryGet('codex')?.config;
+    assert.ok(originalConfig, 'codex config should exist in registry');
+    const boundCatId = 'codex-builtin-oauth-test';
+    catRegistry.register(boundCatId, {
+      ...originalConfig,
+      id: boundCatId,
+      mentionPatterns: [`@${boundCatId}`],
+      provider: 'openai',
+      providerProfileId: 'codex',
+      defaultModel: 'gpt-5.4',
+    });
+
+    const optionsSeen = [];
+    const service = {
+      async *invoke(_prompt, options) {
+        optionsSeen.push(options ?? {});
+        yield { type: 'done', catId: 'codex', timestamp: Date.now() };
+      },
+    };
+
+    const deps = makeDeps();
+    const previousCwd = process.cwd();
+    try {
+      process.chdir(apiDir);
+      await collect(
+        invokeSingleCat(deps, {
+          catId: boundCatId,
+          service,
+          prompt: 'test',
+          userId: 'user-f127-openai-builtin-oauth',
+          threadId: 'thread-f127-openai-builtin-oauth',
+          isLastCat: true,
+        }),
+      );
+    } finally {
+      process.chdir(previousCwd);
+      catRegistry.reset();
+      for (const [id, config] of Object.entries(registrySnapshot)) {
+        catRegistry.register(id, config);
+      }
+      if (originalCodexAuthMode === undefined) delete process.env.CODEX_AUTH_MODE;
+      else process.env.CODEX_AUTH_MODE = originalCodexAuthMode;
+      if (originalOpenAIApiKey === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = originalOpenAIApiKey;
+      if (originalOpenAIBaseUrl === undefined) delete process.env.OPENAI_BASE_URL;
+      else process.env.OPENAI_BASE_URL = originalOpenAIBaseUrl;
+      if (originalOpenAIApiBase === undefined) delete process.env.OPENAI_API_BASE;
+      else process.env.OPENAI_API_BASE = originalOpenAIApiBase;
+      await rm(root, { recursive: true, force: true });
+    }
+
+    const callbackEnv = optionsSeen[0]?.callbackEnv ?? {};
+    assert.equal(callbackEnv.CODEX_AUTH_MODE, 'oauth');
+    assert.equal(callbackEnv.OPENAI_API_KEY, undefined);
+    assert.equal(callbackEnv.OPENAI_BASE_URL, undefined);
+    assert.equal(callbackEnv.OPENAI_API_BASE, undefined);
+  });
+
   it('F127 P1: keeps env-based codex auth untouched when no openai profile is explicitly configured', async () => {
     const root = await mkdtemp(join(tmpdir(), 'f127-openai-env-auth-'));
     const apiDir = join(root, 'packages', 'api');

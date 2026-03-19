@@ -237,6 +237,21 @@ function cloneCatalog(catalog: CatCafeConfig): Record<string, any> {
   return structuredClone(catalog) as Record<string, any>;
 }
 
+function buildDefaultRuntimeRosterEntry(
+  catId: string,
+  family: string,
+  displayName: string,
+  available: boolean,
+): { family: string; roles: string[]; lead: false; available: boolean; evaluation: string } {
+  return {
+    family,
+    roles: ['assistant'],
+    lead: false,
+    available,
+    evaluation: `${displayName} runtime member`,
+  };
+}
+
 export function readRuntimeCatCatalog(projectRoot: string): CatCafeConfig {
   return readOrBootstrapCatalog(projectRoot);
 }
@@ -246,7 +261,19 @@ export function createRuntimeCat(projectRoot: string, input: RuntimeCatInput): C
   if (findBreedVariant(catalog as unknown as CatCafeConfig, input.catId)) {
     throw new Error(`Cat "${input.catId}" already exists in runtime catalog`);
   }
-  catalog.breeds = [...catalog.breeds, createBreedFromInput(input) as unknown as Record<string, any>];
+  const nextBreed = createBreedFromInput(input) as unknown as Record<string, any>;
+  catalog.breeds = [...catalog.breeds, nextBreed];
+  if (catalog.version === 2) {
+    catalog.roster = {
+      ...catalog.roster,
+      [input.catId]: buildDefaultRuntimeRosterEntry(
+        input.catId,
+        String(nextBreed.id ?? input.catId),
+        String(nextBreed.displayName ?? nextBreed.name ?? input.catId),
+        true,
+      ),
+    };
+  }
   return writeAndValidateCatalog(projectRoot, catalog);
 }
 
@@ -380,13 +407,12 @@ export function updateRuntimeCat(projectRoot: string, catId: string, patch: Runt
       ...catalog.roster,
       [catId]: existingEntry
         ? { ...existingEntry, available: patch.available }
-        : {
-            family: String(breed.id ?? catId),
-            roles: ['assistant'],
-            lead: false,
-            available: patch.available,
-            evaluation: `${breed.displayName ?? breed.name ?? catId} runtime member`,
-          },
+        : buildDefaultRuntimeRosterEntry(
+            catId,
+            String(breed.id ?? catId),
+            String(breed.displayName ?? breed.name ?? catId),
+            patch.available,
+          ),
     };
   }
 

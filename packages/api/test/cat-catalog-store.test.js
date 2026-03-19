@@ -206,7 +206,7 @@ function makeF127BootstrapTemplate() {
 }
 
 describe('cat-catalog-store', () => {
-  it('bootstraps default runtime members as claude/codex/gemini oauth members only', () => {
+  it('bootstraps managed clients with bindings while preserving skipped seed members', () => {
     const projectRoot = mkdtempSync(join(tmpdir(), 'cat-catalog-store-f127-default-'));
     const templatePath = join(projectRoot, 'cat-template.json');
     writeFileSync(templatePath, JSON.stringify(makeF127BootstrapTemplate(), null, 2));
@@ -215,16 +215,18 @@ describe('cat-catalog-store', () => {
     const runtimeCatalog = JSON.parse(readFileSync(catalogPath, 'utf-8'));
 
     assert.deepEqual(
-      runtimeCatalog.breeds.map((breed) => breed.id),
-      ['ragdoll', 'maine-coon', 'siamese'],
-    );
-    assert.deepEqual(
-      runtimeCatalog.breeds.flatMap((breed) => breed.variants.map((variant) => variant.accountRef)),
-      ['claude', 'claude', 'codex', 'codex', 'gemini'],
+      runtimeCatalog.breeds.map((breed) => [breed.id, breed.variants.map((variant) => variant.accountRef ?? null)]),
+      [
+        ['ragdoll', ['claude', 'claude']],
+        ['maine-coon', ['codex', 'codex']],
+        ['siamese', ['gemini']],
+        ['dragon-li', [null]],
+        ['golden-chinchilla', [null]],
+      ],
     );
   });
 
-  it('bootstraps installer api_key bindings as one member per client while preserving oauth expansion', () => {
+  it('bootstraps installer api_key bindings while preserving skipped seed members', () => {
     const projectRoot = mkdtempSync(join(tmpdir(), 'cat-catalog-store-f127-installer-'));
     const templatePath = join(projectRoot, 'cat-template.json');
     writeFileSync(templatePath, JSON.stringify(makeF127BootstrapTemplate(), null, 2));
@@ -258,16 +260,14 @@ describe('cat-catalog-store', () => {
     const runtimeCatalog = JSON.parse(readFileSync(catalogPath, 'utf-8'));
 
     assert.deepEqual(
-      runtimeCatalog.breeds.map((breed) => [breed.id, breed.variants.length]),
+      runtimeCatalog.breeds.map((breed) => [breed.id, breed.variants.map((variant) => variant.accountRef ?? null)]),
       [
-        ['ragdoll', 1],
-        ['maine-coon', 2],
+        ['ragdoll', ['api-key-1']],
+        ['maine-coon', ['codex', 'codex']],
+        ['siamese', [null]],
+        ['dragon-li', [null]],
+        ['golden-chinchilla', [null]],
       ],
-    );
-    assert.equal(runtimeCatalog.breeds[0]?.variants[0]?.accountRef, 'api-key-1');
-    assert.deepEqual(
-      runtimeCatalog.breeds[1]?.variants.map((variant) => variant.accountRef),
-      ['codex', 'codex'],
     );
   });
 
@@ -355,6 +355,13 @@ describe('cat-catalog-store', () => {
     assert.equal(catalog.owner?.name, 'Co-worker');
     assert.equal(catalog.reviewPolicy?.preferLead, true);
     assert.ok(catalog.roster?.opus, 'existing roster must be preserved');
+    assert.deepEqual(catalog.roster?.['spark-lite'], {
+      family: 'spark-lite',
+      roles: ['assistant'],
+      lead: false,
+      available: true,
+      evaluation: '火花猫 runtime member',
+    });
     const created = catalog.breeds.find((breed) => breed.catId === 'spark-lite');
     assert.ok(created, 'spark-lite breed should be created');
     assert.equal(created.displayName, '火花猫');

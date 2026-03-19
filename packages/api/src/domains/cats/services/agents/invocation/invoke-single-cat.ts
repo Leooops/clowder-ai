@@ -674,6 +674,8 @@ export async function* invokeSingleCat(deps: InvocationDeps, params: InvocationP
             callbackEnv.OPENAI_BASE_URL = account.baseUrl;
             callbackEnv.OPENAI_API_BASE = account.baseUrl;
           }
+        } else if (boundAccountRef) {
+          callbackEnv.CODEX_AUTH_MODE = 'oauth';
         }
       } catch (err) {
         if (isExplicitBindingCompatibilityError(err)) {
