@@ -134,4 +134,30 @@ describe('PreviewGateway', () => {
     // include __preview_port, allowing the gateway to proxy them correctly
     assert.ok(res.body.includes('cat-cafe-ws-patch'), 'Should inject ws-patch script tag');
   });
+
+  it('rejects start when the requested gateway port is already in use', async () => {
+    const occupied = await new Promise((resolve) => {
+      const server = http.createServer();
+      server.listen(0, '127.0.0.1', () => {
+        const addr = server.address();
+        resolve({ server, port: addr.port });
+      });
+    });
+
+    const conflictingGateway = new PreviewGateway({ port: occupied.port, host: '127.0.0.1' });
+    conflictingGateway.server.on('error', () => {});
+
+    try {
+      await assert.rejects(
+        Promise.race([
+          conflictingGateway.start(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('start timeout')), 250)),
+        ]),
+        /EADDRINUSE/,
+      );
+    } finally {
+      await new Promise((resolve) => occupied.server.close(() => resolve()));
+      await conflictingGateway.stop().catch(() => {});
+    }
+  });
 });

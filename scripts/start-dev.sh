@@ -397,6 +397,22 @@ background_eval_with_null_stdin() {
     ) &
 }
 
+api_launch_command() {
+    if [ "${CAT_CAFE_DIRECT_NO_WATCH:-0}" = "1" ]; then
+        printf '%s' "cd packages/api && exec pnpm run start"
+    else
+        printf '%s' "cd packages/api && exec pnpm run dev"
+    fi
+}
+
+frontend_launch_command() {
+    if [ "$PROD_WEB" = true ]; then
+        printf 'cd packages/web && PORT=%s exec pnpm exec next start -p %s -H 0.0.0.0' "$WEB_PORT" "$WEB_PORT"
+    else
+        printf 'cd packages/web && NEXT_IGNORE_INCORRECT_LOCKFILE=1 PORT=%s exec pnpm exec next dev -p %s' "$WEB_PORT" "$WEB_PORT"
+    fi
+}
+
 # Sidecar summary: ready → 地址, failed → 报告, disabled → 静默
 print_sidecar_summary_all() {
     local name state_var port state
@@ -820,10 +836,9 @@ main() {
         fi
     fi
 
-    API_LAUNCH_CMD="cd packages/api && pnpm run dev"
+    API_LAUNCH_CMD="$(api_launch_command)"
     if [ "${CAT_CAFE_DIRECT_NO_WATCH:-0}" = "1" ]; then
         echo -e "${YELLOW}  ⚠ API 使用非 watch 模式 (CAT_CAFE_DIRECT_NO_WATCH=1)${NC}"
-        API_LAUNCH_CMD="cd packages/api && pnpm run start"
     fi
 
     # API Server
@@ -837,7 +852,7 @@ main() {
         # Production: next start (PWA + Tailscale 友好)
         echo "  启动 Frontend (端口 $WEB_PORT, production)..."
         if [ -d "packages/web/.next" ]; then
-            background_eval_with_null_stdin "cd packages/web && PORT=$WEB_PORT pnpm exec next start -p $WEB_PORT -H 0.0.0.0"
+            background_eval_with_null_stdin "$(frontend_launch_command)"
         else
             echo -e "${RED}  ✗ .next 目录不存在，无法以 production 模式启动${NC}"
             echo -e "${RED}    请先不带 --quick 运行以执行 next build${NC}"
@@ -846,7 +861,7 @@ main() {
     else
         # Development: next dev (热重载)
         echo "  启动 Frontend (端口 $WEB_PORT, dev)..."
-        background_eval_with_null_stdin "cd packages/web && NEXT_IGNORE_INCORRECT_LOCKFILE=1 PORT=$WEB_PORT pnpm exec next dev -p $WEB_PORT"
+        background_eval_with_null_stdin "$(frontend_launch_command)"
     fi
     WEB_PID=$!
     wait_for_port_or_exit "$WEB_PORT" "Frontend" "$WEB_PID" 30 || exit 1

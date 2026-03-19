@@ -25,6 +25,8 @@ test('source-only exposes helper functions for testing seams', () => {
 declare -F configure_mcp_server_path >/dev/null
 declare -F background_eval_with_null_stdin >/dev/null
 declare -F wait_for_port_or_exit >/dev/null
+declare -F api_launch_command >/dev/null
+declare -F frontend_launch_command >/dev/null
 declare -F default_redis_storage_key >/dev/null
 declare -F default_redis_data_dir >/dev/null
 declare -F default_redis_backup_dir >/dev/null
@@ -126,7 +128,10 @@ test('explicit port env vars override .env values for direct startup', () => {
   const scriptPath = resolve(process.cwd(), '../../scripts/start-dev.sh');
   const result = spawnSync(
     'bash',
-    ['-lc', `set -e\nsource "${scriptPath}" --source-only >/dev/null 2>&1\ntrap - EXIT INT TERM\nprintf '%s|%s|%s' "$FRONTEND_PORT" "$API_SERVER_PORT" "$REDIS_PORT"`],
+    [
+      '-lc',
+      `set -e\nsource "${scriptPath}" --source-only >/dev/null 2>&1\ntrap - EXIT INT TERM\nprintf '%s|%s|%s' "$FRONTEND_PORT" "$API_SERVER_PORT" "$REDIS_PORT"`,
+    ],
     {
       encoding: 'utf8',
       env: {
@@ -146,7 +151,10 @@ test('explicit NEXT_PUBLIC_API_URL override survives project .env during direct 
   const scriptPath = resolve(process.cwd(), '../../scripts/start-dev.sh');
   const result = spawnSync(
     'bash',
-    ['-lc', `set -e\nsource "${scriptPath}" --source-only >/dev/null 2>&1\ntrap - EXIT INT TERM\nprintf '%s' "$NEXT_PUBLIC_API_URL"`],
+    [
+      '-lc',
+      `set -e\nsource "${scriptPath}" --source-only >/dev/null 2>&1\ntrap - EXIT INT TERM\nprintf '%s' "$NEXT_PUBLIC_API_URL"`,
+    ],
     {
       encoding: 'utf8',
       env: {
@@ -164,7 +172,10 @@ test('explicit PREVIEW_GATEWAY_PORT override survives project .env during direct
   const scriptPath = resolve(process.cwd(), '../../scripts/start-dev.sh');
   const result = spawnSync(
     'bash',
-    ['-lc', `set -e\nsource "${scriptPath}" --source-only >/dev/null 2>&1\ntrap - EXIT INT TERM\nprintf '%s' "$PREVIEW_GATEWAY_PORT"`],
+    [
+      '-lc',
+      `set -e\nsource "${scriptPath}" --source-only >/dev/null 2>&1\ntrap - EXIT INT TERM\nprintf '%s' "$PREVIEW_GATEWAY_PORT"`,
+    ],
     {
       encoding: 'utf8',
       env: {
@@ -182,7 +193,10 @@ test('direct command mode can prefer current .env ports over ambient shell ports
   const scriptPath = resolve(process.cwd(), '../../scripts/start-dev.sh');
   const result = spawnSync(
     'bash',
-    ['-lc', `set -e\nsource "${scriptPath}" --source-only >/dev/null 2>&1\ntrap - EXIT INT TERM\nprintf '%s|%s|%s' "$FRONTEND_PORT" "$API_SERVER_PORT" "$NEXT_PUBLIC_API_URL"`],
+    [
+      '-lc',
+      `set -e\nsource "${scriptPath}" --source-only >/dev/null 2>&1\ntrap - EXIT INT TERM\nprintf '%s|%s|%s' "$FRONTEND_PORT" "$API_SERVER_PORT" "$NEXT_PUBLIC_API_URL"`,
+    ],
     {
       encoding: 'utf8',
       env: {
@@ -206,7 +220,10 @@ test('redis port override also recomputes isolated redis dirs', () => {
   try {
     const result = spawnSync(
       'bash',
-      ['-lc', `set -e\nsource "${scriptPath}" --source-only >/dev/null 2>&1\ntrap - EXIT INT TERM\nprintf '%s|%s|%s' "$REDIS_STORAGE_KEY" "$REDIS_DATA_DIR" "$REDIS_BACKUP_DIR"`],
+      [
+        '-lc',
+        `set -e\nsource "${scriptPath}" --source-only >/dev/null 2>&1\ntrap - EXIT INT TERM\nprintf '%s|%s|%s' "$REDIS_STORAGE_KEY" "$REDIS_DATA_DIR" "$REDIS_BACKUP_DIR"`,
+      ],
       {
         encoding: 'utf8',
         env: {
@@ -241,7 +258,10 @@ test('redis snapshot archive failure warns and does not abort startup flow', () 
 
     const result = spawnSync(
       'bash',
-      ['-lc', `set -e\nsource "${scriptPath}" --source-only >/dev/null 2>&1\ntrap - EXIT INT TERM\nREDIS_PORT=65432\nREDIS_STORAGE_KEY=test-65432\nREDIS_DATA_DIR="${dataDir}"\nREDIS_BACKUP_DIR="${backupDir}"\nREDIS_DBFILE=dump.rdb\narchive_redis_snapshot manual\nprintf 'ok'`],
+      [
+        '-lc',
+        `set -e\nsource "${scriptPath}" --source-only >/dev/null 2>&1\ntrap - EXIT INT TERM\nREDIS_PORT=65432\nREDIS_STORAGE_KEY=test-65432\nREDIS_DATA_DIR="${dataDir}"\nREDIS_BACKUP_DIR="${backupDir}"\nREDIS_DBFILE=dump.rdb\narchive_redis_snapshot manual\nprintf 'ok'`,
+      ],
       { encoding: 'utf8' },
     );
 
@@ -326,6 +346,47 @@ fi
   assert.equal(output, 'failed-fast');
 });
 
+test('api_launch_command uses exec so wait tracks the long-lived server process', () => {
+  const scriptPath = resolve(process.cwd(), '../../scripts/start-dev.sh');
+  const output = runSourceOnlySnippet(
+    scriptPath,
+    `
+CAT_CAFE_DIRECT_NO_WATCH=1
+printf '%s' "$(api_launch_command)"
+`,
+  );
+
+  assert.equal(output, 'cd packages/api && exec pnpm run start');
+});
+
+test('frontend_launch_command uses exec in production mode so wait tracks next start', () => {
+  const scriptPath = resolve(process.cwd(), '../../scripts/start-dev.sh');
+  const output = runSourceOnlySnippet(
+    scriptPath,
+    `
+PROD_WEB=true
+WEB_PORT=3013
+printf '%s' "$(frontend_launch_command)"
+`,
+  );
+
+  assert.equal(output, 'cd packages/web && PORT=3013 exec pnpm exec next start -p 3013 -H 0.0.0.0');
+});
+
+test('print_manual_download_source_summary returns zero under set -e even when no overrides are set', () => {
+  const scriptPath = resolve(process.cwd(), '../../scripts/start-dev.sh');
+  const output = runSourceOnlySnippet(
+    scriptPath,
+    `
+set -e
+print_manual_download_source_summary
+printf 'survived'
+`,
+  );
+
+  assert.equal(output, 'survived');
+});
+
 test('custom Redis port gets isolated default data and backup dirs', () => {
   const scriptPath = resolve(process.cwd(), '../../scripts/start-dev.sh');
   const tempHome = mkdtempSync(join(tmpdir(), 'cat-cafe-redis-home-'));
@@ -346,11 +407,7 @@ printf '%s|%s|%s' \
 
     assert.equal(
       output,
-      [
-        'dev-6389',
-        `${tempHome}/.cat-cafe/redis-dev-6389`,
-        `${tempHome}/.cat-cafe/redis-backups/dev-6389`,
-      ].join('|'),
+      ['dev-6389', `${tempHome}/.cat-cafe/redis-dev-6389`, `${tempHome}/.cat-cafe/redis-backups/dev-6389`].join('|'),
     );
   } finally {
     rmSync(tempHome, { recursive: true, force: true });
@@ -377,11 +434,7 @@ printf '%s|%s|%s' \
 
     assert.equal(
       output,
-      [
-        'dev',
-        `${tempHome}/.cat-cafe/redis-dev`,
-        `${tempHome}/.cat-cafe/redis-backups/dev`,
-      ].join('|'),
+      ['dev', `${tempHome}/.cat-cafe/redis-dev`, `${tempHome}/.cat-cafe/redis-backups/dev`].join('|'),
     );
   } finally {
     rmSync(tempHome, { recursive: true, force: true });

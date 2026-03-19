@@ -69,4 +69,5 @@ print_manual_download_source_summary() {
   [ -n "${CAT_CAFE_PIP_INDEX_URL:-}" ] && echo "  手动镜像: pip index=$CAT_CAFE_PIP_INDEX_URL"
   [ -n "${CAT_CAFE_PIP_EXTRA_INDEX_URL:-}" ] && echo "  手动镜像: pip extra-index=$CAT_CAFE_PIP_EXTRA_INDEX_URL"
   [ -n "${CAT_CAFE_HF_ENDPOINT:-}" ] && echo "  手动镜像: hf endpoint=$CAT_CAFE_HF_ENDPOINT"
+  true
 }

@@ -205,19 +205,33 @@ export class PreviewGateway {
   }
 
   async start(): Promise<void> {
-    return new Promise((resolve) => {
-      this.server.listen(this.port, this.host, () => {
+    return new Promise((resolve, reject) => {
+      const handleError = (err: Error) => {
+        this.server.off('listening', handleListening);
+        reject(err);
+      };
+      const handleListening = () => {
+        this.server.off('error', handleError);
         const addr = this.server.address() as { port: number };
         this.actualPort = addr.port;
         resolve();
-      });
+      };
+
+      this.server.once('error', handleError);
+      this.server.listen(this.port, this.host, handleListening);
     });
   }
 
   async stop(): Promise<void> {
     this.proxy.close();
-    return new Promise((resolve) => {
-      this.server.close(() => resolve());
+    return new Promise((resolve, reject) => {
+      this.server.close((err) => {
+        if (err && (err as NodeJS.ErrnoException).code !== 'ERR_SERVER_NOT_RUNNING') {
+          reject(err);
+          return;
+        }
+        resolve();
+      });
     });
   }
 }
