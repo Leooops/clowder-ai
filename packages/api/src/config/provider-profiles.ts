@@ -407,15 +407,20 @@ function normalizeBootstrapBindings(
 
   for (const client of ALL_BUILTIN_CLIENTS) {
     const candidate = raw?.[client];
-    if (!candidate || candidate.mode === 'oauth') {
-      next[client] = {
-        enabled: defaults[client]?.enabled ?? false,
-        mode: 'oauth',
-        accountRef: BUILTIN_CLIENT_IDS[client],
-      };
-      if (!DEFAULT_BOOTSTRAP_CLIENTS.includes(client)) {
-        next[client] = defaults[client];
-      }
+    if (!candidate) {
+      next[client] = defaults[client];
+      continue;
+    }
+
+    if (candidate.mode === 'oauth') {
+      next[client] =
+        candidate.enabled === false
+          ? defaults[client]
+          : {
+              enabled: true,
+              mode: 'oauth',
+              accountRef: BUILTIN_CLIENT_IDS[client],
+            };
       continue;
     }
 

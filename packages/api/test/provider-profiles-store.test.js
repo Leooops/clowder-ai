@@ -109,6 +109,24 @@ describe('provider profile store', () => {
     assert.equal(runtime.apiKey, 'sk-sponsor-1');
   });
 
+  it('preserves builtin Dare/OpenCode oauth bootstrap bindings across reads', async () => {
+    await readProviderProfiles(projectRoot);
+    await activateProviderProfile(projectRoot, 'dare', 'dare');
+    await activateProviderProfile(projectRoot, 'opencode', 'opencode');
+
+    const data = await readProviderProfiles(projectRoot);
+    assert.deepEqual(data.bootstrapBindings.dare, {
+      enabled: true,
+      mode: 'oauth',
+      accountRef: 'dare',
+    });
+    assert.deepEqual(data.bootstrapBindings.opencode, {
+      enabled: true,
+      mode: 'oauth',
+      accountRef: 'opencode',
+    });
+  });
+
   it('rejects deleting an account that is still referenced by a runtime member', async () => {
     await seedTemplate(projectRoot);
     const created = await createProviderProfile(projectRoot, {

@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { type CatConfig, type CatProvider, type ContextBudget, catRegistry, type RosterEntry } from '@cat-cafe/shared';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
+import { bootstrapCatCatalog, resolveCatCatalogPath } from '../config/cat-catalog-store.js';
 import { getRoster, loadCatConfig, toAllCatConfigs } from '../config/cat-config-loader.js';
 import { validateRuntimeProviderBinding } from '../config/provider-binding-compat.js';
 import { resolveRuntimeProviderProfileById } from '../config/provider-profiles.js';
@@ -257,9 +258,11 @@ function getManagedCatalogIds(projectRoot: string): Set<string> {
   }
 }
 
-function getResolvedCats() {
+function getResolvedCats(projectRoot: string) {
   try {
-    const resolved = toAllCatConfigs(loadCatConfig());
+    const templatePath = process.env.CAT_TEMPLATE_PATH ?? DEFAULT_TEMPLATE_PATH;
+    bootstrapCatCatalog(projectRoot, templatePath);
+    const resolved = toAllCatConfigs(loadCatConfig(resolveCatCatalogPath(projectRoot)));
     for (const [id, config] of Object.entries(catRegistry.getAllConfigs())) {
       if (!resolved[id]) resolved[id] = config;
     }
@@ -277,8 +280,9 @@ export const catsRoutes: FastifyPluginAsync<CatsRoutesOptions> = async (app, opt
   // GET /api/cats - 获取所有猫猫配置
   app.get('/api/cats', async () => {
     const resolveMetadata = buildCatResponseMetadataResolver();
+    const projectRoot = resolveProjectRoot();
     return {
-      cats: Object.values(getResolvedCats()).map((cat) => toCatResponse(cat, resolveMetadata(cat.id))),
+      cats: Object.values(getResolvedCats(projectRoot)).map((cat) => toCatResponse(cat, resolveMetadata(cat.id))),
     };
   });
 
@@ -383,7 +387,7 @@ export const catsRoutes: FastifyPluginAsync<CatsRoutesOptions> = async (app, opt
 
     const body = parsed.data;
     const projectRoot = resolveProjectRoot();
-    const currentCat = getResolvedCats()[request.params.id] ?? catRegistry.tryGet(request.params.id)?.config;
+    const currentCat = getResolvedCats(projectRoot)[request.params.id] ?? catRegistry.tryGet(request.params.id)?.config;
     if (!currentCat) {
       reply.status(404);
       return { error: `Cat "${request.params.id}" not found` };
@@ -470,7 +474,7 @@ export const catsRoutes: FastifyPluginAsync<CatsRoutesOptions> = async (app, opt
     }
 
     const projectRoot = resolveProjectRoot();
-    const currentCat = getResolvedCats()[request.params.id] ?? catRegistry.tryGet(request.params.id)?.config;
+    const currentCat = getResolvedCats(projectRoot)[request.params.id] ?? catRegistry.tryGet(request.params.id)?.config;
     if (!currentCat) {
       reply.status(404);
       return { error: `Cat "${request.params.id}" not found` };
@@ -510,7 +514,8 @@ export const catsRoutes: FastifyPluginAsync<CatsRoutesOptions> = async (app, opt
   // GET /api/cats/:id/status - 获取猫猫状态
   app.get<{ Params: { id: string } }>('/api/cats/:id/status', async (request, reply) => {
     const { id } = request.params;
-    const cat = getResolvedCats()[id] ?? catRegistry.tryGet(id)?.config;
+    const projectRoot = resolveProjectRoot();
+    const cat = getResolvedCats(projectRoot)[id] ?? catRegistry.tryGet(id)?.config;
 
     if (!cat) {
       reply.status(404);

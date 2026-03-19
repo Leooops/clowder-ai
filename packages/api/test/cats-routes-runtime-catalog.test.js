@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, afterEach, beforeEach, describe, it } from 'node:test';
@@ -71,6 +71,13 @@ function createRuntimeCatalogProject(catalog, template = makeCatalog('template-c
   writeFileSync(join(projectRoot, 'cat-template.json'), JSON.stringify(template, null, 2));
   mkdirSync(join(projectRoot, '.cat-cafe'), { recursive: true });
   writeFileSync(join(projectRoot, '.cat-cafe', 'cat-catalog.json'), JSON.stringify(catalog, null, 2));
+  return projectRoot;
+}
+
+function createTemplateOnlyProject(template) {
+  const projectRoot = mkdtempSync(join(tmpdir(), 'cats-route-template-'));
+  tempDirs.push(projectRoot);
+  writeFileSync(join(projectRoot, 'cat-template.json'), JSON.stringify(template, null, 2));
   return projectRoot;
 }
 
@@ -153,6 +160,42 @@ describe('cats routes read runtime catalog', { concurrency: false }, () => {
     assert.ok(runtimeCat, 'runtime-cat should be listed');
     assert.equal(runtimeCat.source, 'runtime');
     assert.equal(runtimeCat.roster, null);
+  });
+
+  it('GET /api/cats bootstraps the runtime catalog before the first read', async () => {
+    const codexTemplate = makeCatalog('codex', 'Codex');
+    const dareTemplate = makeCatalog('dare', 'Dare', 'dare', 'glm-4.7');
+    const opencodeTemplate = makeCatalog('opencode', 'OpenCode', 'opencode', 'claude-opus-4-6');
+    const template = {
+      version: 1,
+      breeds: [...codexTemplate.breeds, ...dareTemplate.breeds, ...opencodeTemplate.breeds],
+    };
+    const projectRoot = createTemplateOnlyProject(template);
+    process.env.CAT_TEMPLATE_PATH = join(projectRoot, 'cat-template.json');
+
+    const Fastify = (await import('fastify')).default;
+    const { catsRoutes } = await import('../dist/routes/cats.js');
+
+    const app = Fastify();
+    await app.register(catsRoutes);
+
+    const res = await app.inject({ method: 'GET', url: '/api/cats' });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.body);
+    assert.deepEqual(
+      body.cats.map((cat) => cat.id),
+      ['codex'],
+      'first read should match the bootstrapped runtime catalog, not the raw template',
+    );
+
+    const runtimeCatalog = JSON.parse(readFileSync(join(projectRoot, '.cat-cafe', 'cat-catalog.json'), 'utf-8'));
+    assert.deepEqual(
+      runtimeCatalog.breeds.map((breed) => breed.catId),
+      ['codex'],
+      'bootstrapped runtime catalog should filter skipped clients before GET /api/cats responds',
+    );
+
+    await app.close();
   });
 
   it('GET /api/cats/:id/status resolves runtime-only Antigravity cats', async () => {
