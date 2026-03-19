@@ -91,6 +91,198 @@ function Resolve-GlobalRedisBinaries {
     }
 }
 
+function Test-LocalRedisUrl {
+    param([string]$RedisUrl, [string]$RedisPort)
+
+    if (-not $RedisUrl) {
+        return $false
+    }
+
+    $uri = $null
+    if (-not [System.Uri]::TryCreate($RedisUrl, [System.UriKind]::Absolute, [ref]$uri)) {
+        return $false
+    }
+
+    if ($uri.Host -notin @("localhost", "127.0.0.1")) {
+        return $false
+    }
+
+    if ($uri.Port -gt 0 -and "$($uri.Port)" -ne "$RedisPort") {
+        return $false
+    }
+
+    return $true
+}
+
+function Get-InstallerExternalRedisValidationError {
+    param([string]$RedisUrl, [int]$TimeoutMs = 3000)
+
+    if (-not $RedisUrl) {
+        return "External Redis URL is empty."
+    }
+
+    $uri = $null
+    if (-not [System.Uri]::TryCreate($RedisUrl, [System.UriKind]::Absolute, [ref]$uri)) {
+        return "External Redis URL must be an absolute redis:// or rediss:// URL."
+    }
+
+    if ($uri.Scheme -notin @("redis", "rediss")) {
+        return "External Redis URL must use redis:// or rediss://."
+    }
+
+    if (-not $uri.Host) {
+        return "External Redis URL must include a hostname."
+    }
+
+    $port = if ($uri.Port -gt 0) { $uri.Port } elseif ($uri.Scheme -eq "rediss") { 6380 } else { 6379 }
+    $safeRedisUrl = Get-RedactedRedisUrl -RedisUrl $RedisUrl
+    $tcpClient = [System.Net.Sockets.TcpClient]::new()
+    try {
+        $connectTask = $tcpClient.ConnectAsync($uri.Host, $port)
+        if (-not $connectTask.Wait($TimeoutMs) -or -not $tcpClient.Connected) {
+            return "External Redis URL is not reachable: $safeRedisUrl"
+        }
+    } catch {
+        return "External Redis URL is not reachable: $safeRedisUrl"
+    } finally {
+        $tcpClient.Dispose()
+    }
+
+    return ""
+}
+
+function Quote-WindowsProcessArgument {
+    param([string]$Value)
+
+    if ($null -eq $Value -or $Value -eq "") {
+        return '""'
+    }
+
+    if ($Value -notmatch '[\s"]') {
+        return $Value
+    }
+
+    $escaped = $Value -replace '(\\*)"', '$1$1\"'
+    $escaped = $escaped -replace '(\\+)$', '$1$1'
+    return '"' + $escaped + '"'
+}
+
+function Get-RedactedRedisUrl {
+    param([string]$RedisUrl)
+    if (-not $RedisUrl) { return "" }
+    try {
+        $uri = [System.Uri]::new($RedisUrl)
+        if (-not $uri.UserInfo) { return $RedisUrl }
+        $authority = if ($uri.Port -gt 0) { "$($uri.Host):$($uri.Port)" } else { $uri.Host }
+        return "$($uri.Scheme)://$authority$($uri.AbsolutePath)"
+    } catch {
+        return $RedisUrl -replace '://[^@]+@', '://'
+    }
+}
+
+function Get-RedisAuthArgs {
+    param([string]$RedisUrl)
+    if (-not $RedisUrl) { return @() }
+    try {
+        $uri = [System.Uri]::new($RedisUrl)
+        $userInfo = $uri.UserInfo
+        if (-not $userInfo) { return @() }
+        $parts = $userInfo -split ":", 2
+        $authArgs = @()
+        if ($parts.Count -eq 2) {
+            if ($parts[0]) { $authArgs += @("--user", [System.Uri]::UnescapeDataString($parts[0])) }
+            if ($parts[1]) { $authArgs += @("-a", [System.Uri]::UnescapeDataString($parts[1])) }
+        } elseif ($parts[0]) {
+            $authArgs += @("-a", [System.Uri]::UnescapeDataString($parts[0]))
+        }
+        return $authArgs
+    } catch {}
+    return @()
+}
+
+function Get-RedisServerAuthArgs {
+    param([string]$RedisUrl, [string]$AclFilePath)
+    if (-not $RedisUrl) { return @() }
+    try {
+        $uri = [System.Uri]::new($RedisUrl)
+        $userInfo = $uri.UserInfo
+        if (-not $userInfo) { return @() }
+
+        $parts = $userInfo -split ":", 2
+        $username = ""
+        $password = ""
+        if ($parts.Count -eq 2) {
+            $username = if ($parts[0]) { [System.Uri]::UnescapeDataString($parts[0]) } else { "" }
+            $password = if ($parts[1]) { [System.Uri]::UnescapeDataString($parts[1]) } else { "" }
+        } elseif ($parts[0]) {
+            $password = [System.Uri]::UnescapeDataString($parts[0])
+        }
+
+        if (-not $password) { return @() }
+
+        if ($username) {
+            if (-not $AclFilePath) {
+                throw "AclFilePath is required for Redis ACL usernames"
+            }
+            $aclLines = if ($username -eq "default") {
+                @("user default on >$password allkeys allcommands")
+            } else {
+                @(
+                    "user default off",
+                    "user $username on >$password allkeys allcommands"
+                )
+            }
+            $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+            [System.IO.File]::WriteAllLines($AclFilePath, $aclLines, $utf8NoBom)
+            return @("--aclfile", (Quote-WindowsProcessArgument -Value $AclFilePath))
+        }
+
+        return @("--requirepass", (Quote-WindowsProcessArgument -Value $password))
+    } catch {}
+    return @()
+}
+
+function Get-InstallerExceptionDetails {
+    param($ErrorRecord)
+
+    if (-not $ErrorRecord) {
+        return @()
+    }
+
+    $details = @()
+    $exception = $ErrorRecord.Exception
+    $level = 0
+    while ($exception) {
+        $message = $exception.Message
+        $typeName = $exception.GetType().FullName
+        if ($message) {
+            $details += "[$level] $($typeName): $message"
+        } elseif ($typeName) {
+            $details += "[$level] $typeName"
+        }
+        $exception = $exception.InnerException
+        $level++
+    }
+
+    if ($details.Count -eq 0 -and $ErrorRecord.ToString()) {
+        $details += $ErrorRecord.ToString()
+    }
+
+    return $details
+}
+
+function Write-InstallerExceptionDetails {
+    param([string]$Context, $ErrorRecord)
+
+    foreach ($detail in (Get-InstallerExceptionDetails -ErrorRecord $ErrorRecord)) {
+        if ($Context) {
+            Write-Warn "$Context detail: $detail"
+        } else {
+            Write-Warn "Failure detail: $detail"
+        }
+    }
+}
+
 function Ensure-WindowsRedis {
     param([string]$ProjectRoot, [switch]$Memory)
     if ($Memory) {
@@ -177,6 +369,7 @@ function Ensure-WindowsRedis {
         return $true
     } catch {
         Write-Warn "Redis auto-install failed - install Redis manually or rerun with an external Redis URL"
+        Write-InstallerExceptionDetails -Context "Redis auto-install" -ErrorRecord $_
         Write-Warn "Manual Redis install: https://github.com/redis-windows/redis-windows/releases"
         return $false
     }
@@ -252,15 +445,39 @@ function Set-GeminiApiKeyMode {
 function Set-ClaudeInstallerProfile {
     param($State, [string]$ApiKey, [string]$BaseUrl, [string]$Model)
 
-    $profileArgs = @("claude-profile", "set", "--project-dir", $State.ProjectRoot, "--api-key", $ApiKey)
+    $profileArgs = @("claude-profile", "set", "--project-dir", $State.ProjectRoot)
     if ($BaseUrl) { $profileArgs += @("--base-url", $BaseUrl) }
     if ($Model) { $profileArgs += @("--model", $Model) }
-    Invoke-InstallerAuthHelper $State $profileArgs
+    # Pass API key via environment variable to avoid exposure in process listing
+    $env:_INSTALLER_API_KEY = $ApiKey
+    try {
+        Invoke-InstallerAuthHelper $State $profileArgs
+    } finally {
+        Remove-Item Env:\_INSTALLER_API_KEY -ErrorAction SilentlyContinue
+    }
 }
 
 function Remove-ClaudeInstallerProfile {
     param($State)
     Invoke-InstallerAuthHelper $State @("claude-profile", "remove", "--project-dir", $State.ProjectRoot)
+}
+
+function Read-InstallerSecret {
+    param([string]$Prompt)
+
+    $secureValue = Read-Host $Prompt -AsSecureString
+    if ($null -eq $secureValue) {
+        return ""
+    }
+
+    $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureValue)
+    try {
+        return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
+    } finally {
+        if ($bstr -ne [IntPtr]::Zero) {
+            [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+        }
+    }
 }
 
 function Configure-InstallerAuth {
@@ -279,13 +496,21 @@ function Configure-InstallerAuth {
     if ($hasClaude) {
         Write-Host ""
         Write-Host "  Claude (claude):"
-        $choice = Select-InstallerChoice -Title "Claude auth" -Prompt "Choose how to configure Claude" -Options @(
-            @{ Label = "&OAuth"; Help = "Use Claude subscription / OAuth (recommended)"; Value = "oauth" },
+        $hasExistingProfile = Test-Path (Join-Path $ProjectRoot ".cat-cafe/provider-profiles.json")
+        $claudeOptions = @()
+        if ($hasExistingProfile) {
+            $claudeOptions += @{ Label = "&Keep existing"; Help = "Keep the current Claude auth configuration"; Value = "keep" }
+        }
+        $claudeOptions += @(
+            @{ Label = if ($hasExistingProfile) { "&OAuth" } else { "&OAuth (recommended)" }; Help = "Use Claude subscription / OAuth"; Value = "oauth" },
             @{ Label = "&API Key"; Help = "Write an installer-managed Claude API key profile"; Value = "api_key" },
             @{ Label = "&Skip"; Help = "Skip Claude auth setup for now"; Value = "skip" }
         )
-        if ($choice -eq "api_key") {
-            $apiKey = Read-Host "    API Key"
+        $choice = Select-InstallerChoice -Title "Claude auth" -Prompt "Choose how to configure Claude" -Options $claudeOptions
+        if ($choice -eq "keep") {
+            Write-Ok "Claude: keeping existing configuration"
+        } elseif ($choice -eq "api_key") {
+            $apiKey = Read-InstallerSecret "    API Key"
             $baseUrl = Read-Host "    Base URL (Enter = https://api.anthropic.com)"
             $model = Read-Host "    Model (Enter = default)"
             if ($apiKey) {
@@ -306,13 +531,21 @@ function Configure-InstallerAuth {
     if ($hasCodex) {
         Write-Host ""
         Write-Host "  Codex (codex):"
-        $choice = Select-InstallerChoice -Title "Codex auth" -Prompt "Choose how to configure Codex" -Options @(
-            @{ Label = "&OAuth"; Help = "Use Codex OAuth / subscription (recommended)"; Value = "oauth" },
+        $existingCodexKey = Get-InstallerEnvValueFromFile -EnvFile (Join-Path $ProjectRoot ".env") -Key "OPENAI_API_KEY"
+        $codexOptions = @()
+        if ($existingCodexKey) {
+            $codexOptions += @{ Label = "&Keep existing"; Help = "Keep the current Codex auth configuration"; Value = "keep" }
+        }
+        $codexOptions += @(
+            @{ Label = if ($existingCodexKey) { "&OAuth" } else { "&OAuth (recommended)" }; Help = "Use Codex OAuth / subscription"; Value = "oauth" },
             @{ Label = "&API Key"; Help = "Store OpenAI API settings in .env"; Value = "api_key" },
             @{ Label = "&Skip"; Help = "Skip Codex auth setup for now"; Value = "skip" }
         )
-        if ($choice -eq "api_key") {
-            $apiKey = Read-Host "    API Key"
+        $choice = Select-InstallerChoice -Title "Codex auth" -Prompt "Choose how to configure Codex" -Options $codexOptions
+        if ($choice -eq "keep") {
+            Write-Ok "Codex: keeping existing configuration"
+        } elseif ($choice -eq "api_key") {
+            $apiKey = Read-InstallerSecret "    API Key"
             $baseUrl = Read-Host "    Base URL (Enter = default)"
             $model = Read-Host "    Model (Enter = default)"
             if ($apiKey) {
@@ -333,13 +566,21 @@ function Configure-InstallerAuth {
     if ($hasGemini) {
         Write-Host ""
         Write-Host "  Gemini (gemini):"
-        $choice = Select-InstallerChoice -Title "Gemini auth" -Prompt "Choose how to configure Gemini" -Options @(
-            @{ Label = "&OAuth"; Help = "Use Gemini OAuth / subscription (recommended)"; Value = "oauth" },
+        $existingGeminiKey = Get-InstallerEnvValueFromFile -EnvFile (Join-Path $ProjectRoot ".env") -Key "GEMINI_API_KEY"
+        $geminiOptions = @()
+        if ($existingGeminiKey) {
+            $geminiOptions += @{ Label = "&Keep existing"; Help = "Keep the current Gemini auth configuration"; Value = "keep" }
+        }
+        $geminiOptions += @(
+            @{ Label = if ($existingGeminiKey) { "&OAuth" } else { "&OAuth (recommended)" }; Help = "Use Gemini OAuth / subscription"; Value = "oauth" },
             @{ Label = "&API Key"; Help = "Store Gemini API settings in .env"; Value = "api_key" },
             @{ Label = "&Skip"; Help = "Skip Gemini auth setup for now"; Value = "skip" }
         )
-        if ($choice -eq "api_key") {
-            $apiKey = Read-Host "    API Key"
+        $choice = Select-InstallerChoice -Title "Gemini auth" -Prompt "Choose how to configure Gemini" -Options $geminiOptions
+        if ($choice -eq "keep") {
+            Write-Ok "Gemini: keeping existing configuration"
+        } elseif ($choice -eq "api_key") {
+            $apiKey = Read-InstallerSecret "    API Key"
             $model = Read-Host "    Model (Enter = default)"
             if ($apiKey) {
                 Set-GeminiApiKeyMode $State $apiKey $model

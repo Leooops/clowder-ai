@@ -127,7 +127,7 @@ export const providerProfilesRoutes: FastifyPluginAsync<ProviderProfilesRoutesOp
     const projectRoot = await resolveProjectRoot(parsed.data.projectPath);
     if (!projectRoot) {
       reply.status(400);
-      return { error: 'Invalid project path: must be an existing directory under home' };
+      return { error: 'Invalid project path: must be an existing directory under allowed roots' };
     }
 
     const data = await readProviderProfiles(projectRoot);
@@ -152,7 +152,7 @@ export const providerProfilesRoutes: FastifyPluginAsync<ProviderProfilesRoutesOp
     const projectRoot = await resolveProjectRoot(parsed.data.projectPath);
     if (!projectRoot) {
       reply.status(400);
-      return { error: 'Invalid project path: must be an existing directory under home' };
+      return { error: 'Invalid project path: must be an existing directory under allowed roots' };
     }
 
     const body = parsed.data;
@@ -195,7 +195,7 @@ export const providerProfilesRoutes: FastifyPluginAsync<ProviderProfilesRoutesOp
     const projectRoot = await resolveProjectRoot(parsed.data.projectPath);
     if (!projectRoot) {
       reply.status(400);
-      return { error: 'Invalid project path: must be an existing directory under home' };
+      return { error: 'Invalid project path: must be an existing directory under allowed roots' };
     }
     const params = request.params as { profileId: string };
 
@@ -237,7 +237,7 @@ export const providerProfilesRoutes: FastifyPluginAsync<ProviderProfilesRoutesOp
     const projectRoot = await resolveProjectRoot(parsed.data.projectPath);
     if (!projectRoot) {
       reply.status(400);
-      return { error: 'Invalid project path: must be an existing directory under home' };
+      return { error: 'Invalid project path: must be an existing directory under allowed roots' };
     }
     const params = request.params as { profileId: string };
 
@@ -265,7 +265,7 @@ export const providerProfilesRoutes: FastifyPluginAsync<ProviderProfilesRoutesOp
     const projectRoot = await resolveProjectRoot(parsed.data.projectPath);
     if (!projectRoot) {
       reply.status(400);
-      return { error: 'Invalid project path: must be an existing directory under home' };
+      return { error: 'Invalid project path: must be an existing directory under allowed roots' };
     }
     const params = request.params as { profileId: string };
 
@@ -293,7 +293,7 @@ export const providerProfilesRoutes: FastifyPluginAsync<ProviderProfilesRoutesOp
     const projectRoot = await resolveProjectRoot(parsed.data.projectPath);
     if (!projectRoot) {
       reply.status(400);
-      return { error: 'Invalid project path: must be an existing directory under home' };
+      return { error: 'Invalid project path: must be an existing directory under allowed roots' };
     }
     const params = request.params as { profileId: string };
 

@@ -6,7 +6,8 @@ import path from 'node:path';
 function usage() {
   console.error(`Usage:
   node scripts/install-auth-config.mjs env-apply --env-file FILE [--set KEY=VALUE]... [--delete KEY]...
-  node scripts/install-auth-config.mjs claude-profile set --project-dir DIR --api-key KEY [--base-url URL] [--model MODEL]
+  node scripts/install-auth-config.mjs claude-profile set --project-dir DIR [--api-key KEY] [--base-url URL] [--model MODEL]
+    API key can also be passed via _INSTALLER_API_KEY env var (preferred for security).
   node scripts/install-auth-config.mjs claude-profile remove --project-dir DIR`);
   process.exit(1);
 }
@@ -53,16 +54,14 @@ function envQuote(value) {
   if (!stringValue.includes("'")) {
     return `'${stringValue}'`;
   }
-  return `"${stringValue
-    .replace(/\\/g, '\\\\')
-    .replace(/"/g, '\\"')
-    .replace(/\$/g, '\\$')
-    .replace(/`/g, '\\`')}"`;
+  return `"${stringValue.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\$/g, '\\$').replace(/`/g, '\\`')}"`;
 }
 
 function applyEnvChanges(envFile, setPairs, deleteKeys) {
   const existing = existsSync(envFile)
-    ? readFileSync(envFile, 'utf8').split(/\r?\n/).filter((line, index, lines) => !(index === lines.length - 1 && line === ''))
+    ? readFileSync(envFile, 'utf8')
+        .split(/\r?\n/)
+        .filter((line, index, lines) => !(index === lines.length - 1 && line === ''))
     : [];
   const setMap = new Map();
   for (const pair of setPairs) {
@@ -88,10 +87,14 @@ function applyEnvChanges(envFile, setPairs, deleteKeys) {
 }
 
 function readJson(file, fallback) {
+  if (!existsSync(file)) {
+    return fallback;
+  }
   try {
     return JSON.parse(readFileSync(file, 'utf8'));
-  } catch {
-    return fallback;
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to parse ${path.basename(file)}: ${reason}`);
   }
 }
 
@@ -160,7 +163,11 @@ function normalizeActiveProfileIds(profilesFile) {
   const legacyActive = profilesFile.activeProfileId;
   if (legacyActive) {
     const legacyProfile = profilesFile.profiles.find((profile) => profile.id === legacyActive);
-    if (legacyProfile?.protocol === 'anthropic' || legacyProfile?.protocol === 'openai' || legacyProfile?.protocol === 'google') {
+    if (
+      legacyProfile?.protocol === 'anthropic' ||
+      legacyProfile?.protocol === 'openai' ||
+      legacyProfile?.protocol === 'google'
+    ) {
       next[legacyProfile.protocol] = legacyActive;
     }
   }
@@ -206,7 +213,10 @@ function normalizeProfilesFile(raw) {
         updatedAt: legacyProfile.updatedAt,
       });
     }
-    if (raw.providers.anthropic.activeProfileId && raw.providers.anthropic.activeProfileId !== 'anthropic-subscription-default') {
+    if (
+      raw.providers.anthropic.activeProfileId &&
+      raw.providers.anthropic.activeProfileId !== 'anthropic-subscription-default'
+    ) {
       next.activeProfileId = raw.providers.anthropic.activeProfileId;
     }
     return next;
@@ -260,8 +270,14 @@ function writeClaudeProfile(projectDir, apiKey, baseUrl, model) {
 
 function removeClaudeProfile(projectDir) {
   const profileDir = path.join(projectDir, '.cat-cafe');
+  if (!existsSync(profileDir)) {
+    return;
+  }
   const profileFile = path.join(profileDir, 'provider-profiles.json');
   const secretsFile = path.join(profileDir, 'provider-profiles.secrets.local.json');
+  if (!existsSync(profileFile) && !existsSync(secretsFile)) {
+    return;
+  }
   const profileId = 'installer-managed';
   const profiles = normalizeProfilesFile(readJson(profileFile, null));
   const secrets = normalizeSecretsFile(readJson(secretsFile, null));
@@ -271,7 +287,11 @@ function removeClaudeProfile(projectDir) {
   profiles.profiles = profiles.profiles.filter((profile) => profile.id !== profileId);
   normalizeActiveProfileIds(profiles);
   if (profiles.activeProfileId === profileId || profiles.activeProfileIds.anthropic === profileId) {
-    profiles.activeProfileIds.anthropic = resolveProtocolFallbackProfileId(profiles.profiles, 'anthropic', 'claude-oauth');
+    profiles.activeProfileIds.anthropic = resolveProtocolFallbackProfileId(
+      profiles.profiles,
+      'anthropic',
+      'claude-oauth',
+    );
     profiles.activeProfileId = profiles.activeProfileIds.anthropic;
   }
   delete secrets.profiles[profileId];
@@ -281,25 +301,36 @@ function removeClaudeProfile(projectDir) {
   }
 }
 
-const { positionals, values } = parseArgs(process.argv.slice(2));
-if (positionals[0] === 'env-apply') {
-  applyEnvChanges(getRequired(values, 'env-file'), values.get('set') ?? [], values.get('delete') ?? []);
-  process.exit(0);
-}
+try {
+  const { positionals, values } = parseArgs(process.argv.slice(2));
+  if (positionals[0] === 'env-apply') {
+    applyEnvChanges(getRequired(values, 'env-file'), values.get('set') ?? [], values.get('delete') ?? []);
+    process.exit(0);
+  }
 
-if (positionals[0] === 'claude-profile' && positionals[1] === 'set') {
-  writeClaudeProfile(
-    getRequired(values, 'project-dir'),
-    getRequired(values, 'api-key'),
-    getOptional(values, 'base-url', 'https://api.anthropic.com'),
-    getOptional(values, 'model', ''),
-  );
-  process.exit(0);
-}
+  if (positionals[0] === 'claude-profile' && positionals[1] === 'set') {
+    const apiKey = getOptional(values, 'api-key', '') || process.env._INSTALLER_API_KEY || '';
+    if (!apiKey) {
+      console.error('Error: API key required via --api-key or _INSTALLER_API_KEY env var');
+      process.exit(1);
+    }
+    writeClaudeProfile(
+      getRequired(values, 'project-dir'),
+      apiKey,
+      getOptional(values, 'base-url', 'https://api.anthropic.com'),
+      getOptional(values, 'model', ''),
+    );
+    process.exit(0);
+  }
 
-if (positionals[0] === 'claude-profile' && positionals[1] === 'remove') {
-  removeClaudeProfile(getRequired(values, 'project-dir'));
-  process.exit(0);
-}
+  if (positionals[0] === 'claude-profile' && positionals[1] === 'remove') {
+    removeClaudeProfile(getRequired(values, 'project-dir'));
+    process.exit(0);
+  }
 
-usage();
+  usage();
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(message);
+  process.exit(1);
+}
