@@ -10,16 +10,16 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { relative, resolve, sep } from 'node:path';
+import { resolve } from 'node:path';
 import { type CatId, type ContextHealth, catRegistry, type MessageContent } from '@cat-cafe/shared';
-import { isSessionChainEnabled, loadCatConfig, toAllCatConfigs } from '../../../../../config/cat-config-loader.js';
+import { resolveBoundAccountRefForCat } from '../../../../../config/cat-account-binding.js';
+import { isSessionChainEnabled } from '../../../../../config/cat-config-loader.js';
 import { getContextWindowFallback } from '../../../../../config/context-window-sizes.js';
 import {
   resolveBuiltinClientForProvider,
   validateRuntimeProviderBinding,
 } from '../../../../../config/provider-binding-compat.js';
 import {
-  builtinAccountIdForClient,
   resolveAnthropicRuntimeProfile,
   resolveRuntimeProviderProfileForClient,
 } from '../../../../../config/provider-profiles.js';
@@ -78,29 +78,6 @@ function abortableNext<T>(iter: AsyncIterator<T>, signal: AbortSignal): Promise<
 }
 
 const ANTHROPIC_PROFILE_MODE_KEY = 'CAT_CAFE_ANTHROPIC_PROFILE_MODE';
-
-function isWithinProjectRoot(projectRoot: string, candidatePath: string): boolean {
-  const rel = relative(resolve(projectRoot), resolve(candidatePath));
-  return rel === '' || (!rel.startsWith(`..${sep}`) && rel !== '..');
-}
-
-function resolveProjectTemplatePath(projectRoot: string): string {
-  const envPath = process.env.CAT_TEMPLATE_PATH?.trim();
-  if (envPath) {
-    const resolvedEnvPath = resolve(envPath);
-    if (isWithinProjectRoot(projectRoot, resolvedEnvPath)) return resolvedEnvPath;
-  }
-  return resolve(projectRoot, 'cat-template.json');
-}
-
-function isSeedCat(projectRoot: string, catId: string): boolean {
-  try {
-    const seedCats = toAllCatConfigs(loadCatConfig(resolveProjectTemplatePath(projectRoot)));
-    return Object.prototype.hasOwnProperty.call(seedCats, catId);
-  } catch {
-    return false;
-  }
-}
 const ANTHROPIC_PROFILE_MODE_API_KEY = 'api_key';
 
 /** Derive a URL-safe slug from profile ID for proxy routing. */
@@ -614,21 +591,9 @@ export async function* invokeSingleCat(deps: InvocationDeps, params: InvocationP
     const catConfig = catRegistry.tryGet(catId as string)?.config;
     const provider = catConfig?.provider;
     const builtinClient = provider ? resolveBuiltinClientForProvider(provider) : null;
-    const legacyCatConfig = catConfig as (typeof catConfig & { providerProfileId?: string }) | undefined;
     const defaultModel = catConfig?.defaultModel?.trim() || undefined;
     const projectRoot = workingDirectory ? findMonorepoRoot(workingDirectory) : resolveActiveProjectRoot(process.cwd());
-    const runtimeCatalogExists = existsSync(resolve(projectRoot, '.cat-cafe', 'cat-catalog.json'));
-    const explicitAccountRef = catConfig?.accountRef?.trim() || undefined;
-    const explicitProviderProfileId = legacyCatConfig?.providerProfileId?.trim() || undefined;
-    const inheritedBuiltinAccountRef =
-      !runtimeCatalogExists &&
-      !!builtinClient &&
-      explicitAccountRef === builtinAccountIdForClient(builtinClient);
-    const inheritedSeedBootstrapBinding =
-      runtimeCatalogExists && !!explicitAccountRef && !explicitProviderProfileId && isSeedCat(projectRoot, catId);
-    const boundAccountRef =
-      explicitProviderProfileId ||
-      (inheritedBuiltinAccountRef || inheritedSeedBootstrapBinding ? undefined : explicitAccountRef);
+    const boundAccountRef = resolveBoundAccountRefForCat(projectRoot, catId, catConfig);
     const resolveRuntimeAccount = async () => {
       if (!builtinClient) return null;
       const runtime = await resolveRuntimeProviderProfileForClient(projectRoot, builtinClient, boundAccountRef);

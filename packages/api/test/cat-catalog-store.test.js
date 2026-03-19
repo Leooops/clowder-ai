@@ -271,6 +271,24 @@ describe('cat-catalog-store', () => {
     );
   });
 
+  it('preserves explicit seed account markers while bootstrapping runtime catalog', () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), 'cat-catalog-store-f127-explicit-seed-'));
+    const templatePath = join(projectRoot, 'cat-template.json');
+    const template = makeF127BootstrapTemplate();
+    const codexBreed = template.breeds.find((breed) => breed.catId === 'codex');
+    if (!codexBreed) throw new Error('codex breed missing from template');
+    codexBreed.variants[0].providerProfileId = 'codex-pinned';
+    writeFileSync(templatePath, JSON.stringify(template, null, 2));
+
+    const catalogPath = bootstrapCatCatalog(projectRoot, templatePath);
+    const runtimeCatalog = JSON.parse(readFileSync(catalogPath, 'utf-8'));
+    const runtimeCodexBreed = runtimeCatalog.breeds.find((breed) => breed.catId === 'codex');
+    const runtimeCodexVariant = runtimeCodexBreed?.variants[0];
+
+    assert.equal(runtimeCodexVariant?.accountRef, 'codex-pinned');
+    assert.equal(runtimeCodexVariant?.providerProfileId, 'codex-pinned');
+  });
+
   it('bootstraps .cat-cafe/cat-catalog.json from cat-template.json', () => {
     const projectRoot = mkdtempSync(join(tmpdir(), 'cat-catalog-store-'));
     const templatePath = join(projectRoot, 'cat-template.json');

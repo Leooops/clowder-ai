@@ -11,13 +11,13 @@ import cors from '@fastify/cors';
 import fastifyWebsocket from '@fastify/websocket';
 import Fastify from 'fastify';
 import { generateCliConfigs, readCapabilitiesConfig } from './config/capabilities/capability-orchestrator.js';
+import { resolveBoundAccountRefForCat } from './config/cat-account-binding.js';
 import { getCatContextBudget } from './config/cat-budgets.js';
 import { bootstrapDefaultCatCatalog, getConfigSessionStrategy, toAllCatConfigs } from './config/cat-config-loader.js';
 import { resolveFrontendBaseUrl, resolveFrontendCorsOrigins } from './config/frontend-origin.js';
 import {
   resolveAnthropicRuntimeProfile,
-  resolveRuntimeProviderProfile,
-  resolveRuntimeProviderProfileById,
+  resolveRuntimeProviderProfileForClient,
 } from './config/provider-profiles.js';
 import { initRuntimeOverrides } from './config/session-strategy-overrides.js';
 import { assertStorageReady } from './config/storage-guard.js';
@@ -308,12 +308,12 @@ async function main(): Promise<void> {
         }
         const catConfig = catRegistry.tryGet(catId)?.config;
         if (catConfig?.provider === 'anthropic' || catConfig?.provider === 'opencode') {
-          const legacyCatConfig = catConfig as CatConfig & { providerProfileId?: string };
-          const boundAccountRef = catConfig.accountRef?.trim() || legacyCatConfig.providerProfileId?.trim();
-          let runtime = boundAccountRef ? await resolveRuntimeProviderProfileById(projectRoot, boundAccountRef) : null;
-          if (!runtime && catConfig.provider === 'anthropic') {
-            runtime = await resolveRuntimeProviderProfile(projectRoot, 'anthropic');
-          }
+          const boundAccountRef = resolveBoundAccountRefForCat(
+            projectRoot,
+            catId,
+            catConfig as CatConfig & { providerProfileId?: string },
+          );
+          const runtime = await resolveRuntimeProviderProfileForClient(projectRoot, catConfig.provider, boundAccountRef);
           if (!runtime?.apiKey) return null;
           return { apiKey: runtime.apiKey, baseUrl: runtime.baseUrl || 'https://api.anthropic.com' };
         }

@@ -34,9 +34,27 @@ function providerToBootstrapClient(provider: unknown): BuiltinAccountClient | nu
   }
 }
 
-function cloneWithAccountRef(variant: Record<string, unknown>, accountRef: string): Record<string, unknown> {
+function trimBinding(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function resolveExplicitVariantAccountRef(variant: Record<string, unknown>): string | null {
+  return trimBinding(variant.providerProfileId) ?? trimBinding(variant.accountRef);
+}
+
+function cloneWithAccountRef(
+  variant: Record<string, unknown>,
+  accountRef: string,
+  options?: { explicit?: boolean },
+): Record<string, unknown> {
   const next: Record<string, unknown> = { ...variant, accountRef };
-  delete (next as { providerProfileId?: unknown }).providerProfileId;
+  if (options?.explicit) {
+    next.providerProfileId = accountRef;
+  } else {
+    delete (next as { providerProfileId?: unknown }).providerProfileId;
+  }
   return next;
 }
 
@@ -54,10 +72,21 @@ function resolveSelectedVariants(
     const selected =
       variants.find((variant) => variant.id === defaultVariantId) ??
       variants.find((variant) => providerToBootstrapClient(variant.provider) != null);
-    return selected ? [cloneWithAccountRef(selected, accountRef)] : [];
+    if (!selected) return [];
+    const explicitAccountRef = resolveExplicitVariantAccountRef(selected);
+    return [
+      cloneWithAccountRef(selected, explicitAccountRef ?? accountRef, {
+        explicit: explicitAccountRef != null,
+      }),
+    ];
   }
 
-  return variants.map((variant) => cloneWithAccountRef(variant, accountRef));
+  return variants.map((variant) => {
+    const explicitAccountRef = resolveExplicitVariantAccountRef(variant);
+    return cloneWithAccountRef(variant, explicitAccountRef ?? accountRef, {
+      explicit: explicitAccountRef != null,
+    });
+  });
 }
 
 function fallbackAccountRefForClient(client: BuiltinAccountClient, binding: BootstrapBinding | undefined): string {
@@ -77,14 +106,17 @@ function migrateExistingCatalogBindings(
     for (const variant of variants) {
       const client = providerToBootstrapClient(variant.provider);
       if (!client) continue;
+      const explicitProviderProfileId = trimBinding(variant.providerProfileId);
       const existingAccountRef = typeof variant.accountRef === 'string' ? variant.accountRef.trim() : '';
       if (existingAccountRef) continue;
+      if (explicitProviderProfileId) {
+        variant.accountRef = explicitProviderProfileId;
+        dirty = true;
+        continue;
+      }
       const nextAccountRef = fallbackAccountRefForClient(client, bootstrapBindings[client]);
       if (!nextAccountRef) continue;
       variant.accountRef = nextAccountRef;
-      if ('providerProfileId' in variant) {
-        delete (variant as { providerProfileId?: unknown }).providerProfileId;
-      }
       dirty = true;
     }
   }

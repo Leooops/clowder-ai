@@ -47,6 +47,7 @@ export function HubCatEditor({ cat, draft, open, onClose, onSaved }: HubCatEdito
   const [form, setForm] = useState<HubCatEditorFormState>(() => initialState(cat, draft));
   const [strategyForm, setStrategyForm] = useState<StrategyFormState | null>(null);
   const [strategyBaseline, setStrategyBaseline] = useState<StrategyFormState | null>(null);
+  const [strategyBaselineHasOverride, setStrategyBaselineHasOverride] = useState(false);
   const [codexSettings, setCodexSettings] = useState<CodexRuntimeSettings | null>(null);
   const [codexSettingsBaseline, setCodexSettingsBaseline] = useState<CodexRuntimeSettings | null>(null);
 
@@ -72,6 +73,7 @@ export function HubCatEditor({ cat, draft, open, onClose, onSaved }: HubCatEdito
     setError(null);
     setStrategyError(null);
     setCodexSettingsError(null);
+    setStrategyBaselineHasOverride(false);
     setCodexSettingsBaseline(null);
   }, [open, cat, draft]);
 
@@ -102,6 +104,7 @@ export function HubCatEditor({ cat, draft, open, onClose, onSaved }: HubCatEdito
     if (!open || !cat) {
       setStrategyForm(null);
       setStrategyBaseline(null);
+      setStrategyBaselineHasOverride(false);
       setLoadingStrategy(false);
       return;
     }
@@ -120,6 +123,7 @@ export function HubCatEditor({ cat, draft, open, onClose, onSaved }: HubCatEdito
         const nextStrategyForm = entry ? toStrategyForm(entry) : null;
         setStrategyForm(nextStrategyForm);
         setStrategyBaseline(nextStrategyForm);
+        setStrategyBaselineHasOverride(Boolean(entry?.hasOverride));
       })
       .catch((err) => {
         if (!cancelled) setStrategyError(err instanceof Error ? err.message : 'Session 策略加载失败');
@@ -239,6 +243,12 @@ export function HubCatEditor({ cat, draft, open, onClose, onSaved }: HubCatEdito
     setSaving(true);
     setError(null);
     try {
+      const rollbackSteps: Array<() => Promise<void>> = [];
+      const rollbackMutations = async () => {
+        for (const rollback of rollbackSteps.reverse()) {
+          await rollback().catch(() => {});
+        }
+      };
       const catPayload = buildCatPayload(form, cat);
       const rollbackCatPayload = cat ? buildCatPayload(initialState(cat, null), cat) : null;
       const nextStrategyPayload = cat && strategyForm ? buildStrategyPayload(strategyForm) : null;
@@ -259,6 +269,21 @@ export function HubCatEditor({ cat, draft, open, onClose, onSaved }: HubCatEdito
           setError((payload.error as string) ?? `Session 策略保存失败 (${strategyRes.status})`);
           return;
         }
+        if (strategyBaselineHasOverride && baselineStrategyPayload) {
+          rollbackSteps.push(() =>
+            apiFetch(`/api/config/session-strategy/${cat.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(baselineStrategyPayload),
+            }),
+          );
+        } else {
+          rollbackSteps.push(() =>
+            apiFetch(`/api/config/session-strategy/${cat.id}`, {
+              method: 'DELETE',
+            }),
+          );
+        }
       }
 
       const res = await apiFetch(cat ? `/api/cats/${cat.id}` : '/api/cats', {
@@ -267,23 +292,36 @@ export function HubCatEditor({ cat, draft, open, onClose, onSaved }: HubCatEdito
         body: JSON.stringify(catPayload),
       });
       if (!res.ok) {
-        if (cat && strategyChanged && baselineStrategyPayload) {
-          // Best-effort rollback: keep strategy unchanged when cat persistence fails.
-          await apiFetch(`/api/config/session-strategy/${cat.id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(baselineStrategyPayload),
-          }).catch(() => {});
-        }
+        await rollbackMutations();
         const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
         setError((payload.error as string) ?? `保存失败 (${res.status})`);
         return;
       }
       const persistedCatBody = (await res.json().catch(() => ({}))) as { cat?: { id?: string } };
       const persistedCatId = persistedCatBody.cat?.id ?? cat?.id ?? null;
+      if (persistedCatId) {
+        if (cat && rollbackCatPayload) {
+          rollbackSteps.push(() =>
+            apiFetch(`/api/cats/${persistedCatId}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(rollbackCatPayload),
+            }),
+          );
+        } else if (!cat) {
+          rollbackSteps.push(() =>
+            apiFetch(`/api/cats/${persistedCatId}`, {
+              method: 'DELETE',
+            }),
+          );
+        }
+      }
 
       if (showCodexSettings && codexSettings) {
-        const codexPatches = buildCodexConfigPatches(codexSettings, codexSettingsBaseline ?? toCodexRuntimeSettings());
+        const codexBaseline = codexSettingsBaseline ?? toCodexRuntimeSettings();
+        const codexPatches = buildCodexConfigPatches(codexSettings, codexBaseline);
+        const rollbackCodexPatches = buildCodexConfigPatches(codexBaseline, codexSettings);
+        const appliedConfigPatchKeys: string[] = [];
         for (const patch of codexPatches) {
           const configRes = await apiFetch('/api/config', {
             method: 'PATCH',
@@ -291,23 +329,22 @@ export function HubCatEditor({ cat, draft, open, onClose, onSaved }: HubCatEdito
             body: JSON.stringify(patch),
           });
           if (!configRes.ok) {
-            if (persistedCatId) {
-              if (cat && rollbackCatPayload) {
-                await apiFetch(`/api/cats/${persistedCatId}`, {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(rollbackCatPayload),
-                }).catch(() => {});
-              } else if (!cat) {
-                await apiFetch(`/api/cats/${persistedCatId}`, {
-                  method: 'DELETE',
-                }).catch(() => {});
-              }
+            const appliedRollbackPatches = rollbackCodexPatches.filter((rollbackPatch) =>
+              appliedConfigPatchKeys.includes(rollbackPatch.key),
+            );
+            for (const rollbackPatch of appliedRollbackPatches.reverse()) {
+              await apiFetch('/api/config', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(rollbackPatch),
+              }).catch(() => {});
             }
+            await rollbackMutations();
             const payload = (await configRes.json().catch(() => ({}))) as Record<string, unknown>;
             setError((payload.error as string) ?? `Codex 运行参数保存失败 (${configRes.status})`);
             return;
           }
+          appliedConfigPatchKeys.push(patch.key);
         }
       }
 
