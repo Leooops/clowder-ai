@@ -1,7 +1,7 @@
 import type { CatData } from '@/hooks/useCatData';
 import type { ProfileItem } from './hub-provider-profiles.types';
 import type { CatStrategyEntry, StrategyType } from './hub-strategy-types';
-import { defaultMcpSupportForClient, protocolForClient, requiresApiKeyProfile } from './hub-cat-editor.protocols';
+import { defaultMcpSupportForClient, protocolForClient } from './hub-cat-editor.protocols';
 
 export type ClientValue = 'anthropic' | 'openai' | 'google' | 'dare' | 'opencode' | 'antigravity';
 export type SessionChainValue = 'true' | 'false';
@@ -134,11 +134,7 @@ export function filterProfiles(client: ClientValue, profiles: ProfileItem[]): Pr
   if (client === 'antigravity') return [];
   const protocol = protocolForClient(client);
   if (!protocol) return [];
-  const scoped = profiles.filter((profile) => profile.protocol === protocol);
-  if (requiresApiKeyProfile(client)) {
-    return scoped.filter((profile) => profile.authType === 'api_key');
-  }
-  return scoped;
+  return profiles.filter((profile) => profile.protocol === protocol);
 }
 
 export function initialState(cat?: CatData | null, draft?: HubCatEditorDraft | null): HubCatEditorFormState {

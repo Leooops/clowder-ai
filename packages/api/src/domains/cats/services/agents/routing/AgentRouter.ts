@@ -21,7 +21,7 @@
 import type { CatId, MessageContent } from '@cat-cafe/shared';
 import { catRegistry, escapeRegExp } from '@cat-cafe/shared';
 import type { SessionStore } from '@cat-cafe/shared/utils';
-import { getDefaultCatId } from '../../../../../config/cat-config-loader.js';
+import { getDefaultCatId, isCatAvailable } from '../../../../../config/cat-config-loader.js';
 import type { IntentResult } from '../../context/IntentParser.js';
 import { parseIntent, stripIntentTags } from '../../context/IntentParser.js';
 import { SessionManager } from '../../session/SessionManager.js';
@@ -341,6 +341,10 @@ export class AgentRouter {
 
         if (isEndBoundary && !isConsumed) {
           consumed.push([pos, end]);
+          if (!isCatAvailable(catId as string)) {
+            searchFrom = pos + 1;
+            continue;
+          }
           if (!seenCats.has(catId as string)) {
             seenCats.add(catId as string);
             mentions.push({ catId, position: pos });

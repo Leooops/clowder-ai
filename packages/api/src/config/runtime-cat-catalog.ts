@@ -1,6 +1,15 @@
 import { mkdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import type { CatBreed, CatCafeConfig, CatColor, CatProvider, CatVariant, CliConfig, ContextBudget } from '@cat-cafe/shared';
+import type {
+  CatBreed,
+  CatCafeConfig,
+  CatColor,
+  CatProvider,
+  CatVariant,
+  CliConfig,
+  ContextBudget,
+  OwnerConfig,
+} from '@cat-cafe/shared';
 import { createCatId } from '@cat-cafe/shared';
 import { clearBudgetCache } from './cat-budgets.js';
 import { _resetCachedConfig, loadCatConfig, toAllCatConfigs } from './cat-config-loader.js';
@@ -51,6 +60,15 @@ export interface RuntimeCatUpdate {
   cli?: CliConfig;
   commandArgs?: string[];
   contextBudget?: ContextBudget | null;
+  available?: boolean;
+}
+
+export interface RuntimeOwnerUpdate {
+  name?: string;
+  aliases?: string[];
+  mentionPatterns?: string[];
+  avatar?: string | null;
+  color?: CatColor | null;
 }
 
 interface BreedVariantLocation {
@@ -80,6 +98,14 @@ function normalizeMentionPatterns(catId: string, mentionPatterns: readonly strin
   const canonical = `@${catId}`;
   if (!unique.includes(canonical)) unique.unshift(canonical);
   return unique;
+}
+
+function normalizeOwnerMentionPatterns(mentionPatterns: readonly string[]): string[] {
+  const values = mentionPatterns
+    .map((pattern) => pattern.trim())
+    .filter((pattern) => pattern.length > 0)
+    .map((pattern) => (pattern.startsWith('@') ? pattern : `@${pattern}`));
+  return Array.from(new Set(values));
 }
 
 function readOrBootstrapCatalog(projectRoot: string): CatCafeConfig {
@@ -345,7 +371,83 @@ export function updateRuntimeCat(projectRoot: string, catId: string, patch: Runt
       delete variant.commandArgs;
     }
   }
+  if (patch.available !== undefined && catalog.version === 2) {
+    const existingEntry = catalog.roster[catId];
+    catalog.roster = {
+      ...catalog.roster,
+      [catId]: existingEntry
+        ? { ...existingEntry, available: patch.available }
+        : {
+            family: String(breed.id ?? catId),
+            roles: ['assistant'],
+            lead: false,
+            available: patch.available,
+            evaluation: `${breed.displayName ?? breed.name ?? catId} runtime member`,
+          },
+    };
+  }
 
+  return writeAndValidateCatalog(projectRoot, catalog);
+}
+
+export function updateRuntimeOwner(projectRoot: string, patch: RuntimeOwnerUpdate): CatCafeConfig {
+  const catalog = cloneCatalog(readOrBootstrapCatalog(projectRoot));
+  if (catalog.version !== 2) {
+    throw new Error('Owner config requires a version 2 runtime catalog');
+  }
+
+  const currentOwner = (catalog.owner ?? {
+    name: '铲屎官',
+    aliases: [],
+    mentionPatterns: ['@user', '@铲屎官'],
+  }) as OwnerConfig;
+
+  const nextOwner: Record<string, unknown> = {
+    ...currentOwner,
+    ...(patch.name !== undefined ? { name: patch.name } : {}),
+    ...(patch.aliases !== undefined
+      ? {
+          aliases: Array.from(
+            new Set(
+              patch.aliases.map((alias) => alias.trim()).filter((alias) => alias.length > 0),
+            ),
+          ),
+        }
+      : {}),
+    ...(patch.mentionPatterns !== undefined
+      ? {
+          mentionPatterns: normalizeOwnerMentionPatterns(patch.mentionPatterns),
+        }
+      : {}),
+  };
+
+  if (patch.avatar !== undefined) {
+    if (patch.avatar && patch.avatar.trim().length > 0) {
+      nextOwner.avatar = patch.avatar.trim();
+    } else {
+      delete nextOwner.avatar;
+    }
+  }
+
+  if (patch.color !== undefined) {
+    if (patch.color) {
+      nextOwner.color = patch.color;
+    } else {
+      delete nextOwner.color;
+    }
+  }
+
+  const normalizedOwner: OwnerConfig = {
+    name: String(nextOwner.name ?? currentOwner.name),
+    aliases: Array.isArray(nextOwner.aliases) ? (nextOwner.aliases as string[]) : [...currentOwner.aliases],
+    mentionPatterns: Array.isArray(nextOwner.mentionPatterns)
+      ? (nextOwner.mentionPatterns as string[])
+      : [...currentOwner.mentionPatterns],
+    ...(typeof nextOwner.avatar === 'string' ? { avatar: nextOwner.avatar } : {}),
+    ...(nextOwner.color ? { color: nextOwner.color as CatColor } : {}),
+  };
+
+  catalog.owner = normalizedOwner;
   return writeAndValidateCatalog(projectRoot, catalog);
 }
 

@@ -13,6 +13,7 @@ import { z } from 'zod';
 import { collectConfigSnapshot } from '../config/ConfigRegistry.js';
 import { configStore } from '../config/ConfigStore.js';
 import type { ConfigSnapshot } from '../config/config-snapshot.js';
+import { updateRuntimeOwner } from '../config/runtime-cat-catalog.js';
 import { buildEnvSummary, ENV_CATEGORIES, isEditableEnvVarName } from '../config/env-registry.js';
 import { AuditEventTypes, getEventAuditLog } from '../domains/cats/services/orchestration/EventAuditLog.js';
 
@@ -35,6 +36,20 @@ const patchSchema = z.object({
 
 const envPatchSchema = z.object({
   updates: z.array(z.object({ name: z.string().min(1), value: z.string().nullable() })).min(1),
+});
+
+const ownerPatchSchema = z.object({
+  name: z.string().trim().min(1),
+  aliases: z.array(z.string().trim().min(1)),
+  mentionPatterns: z.array(z.string().trim().min(1)).min(1),
+  avatar: z.string().trim().nullable().optional(),
+  color: z
+    .object({
+      primary: z.string().min(1),
+      secondary: z.string().min(1),
+    })
+    .nullable()
+    .optional(),
 });
 
 const runtimeStatusQuerySchema = z.object({
@@ -166,6 +181,49 @@ export async function configRoutes(app: FastifyInstance, opts: ConfigRoutesOptio
     }
 
     return { config: after };
+  });
+
+  app.patch('/api/config/owner', async (request, reply) => {
+    const parsed = ownerPatchSchema.safeParse(request.body);
+    if (!parsed.success) {
+      reply.status(400);
+      return { error: 'Invalid request', details: parsed.error.issues };
+    }
+    const operator = resolveOperator(request.headers['x-cat-cafe-user']);
+    if (!operator) {
+      reply.status(400);
+      return { error: 'Identity required (X-Cat-Cafe-User header)' };
+    }
+
+    try {
+      updateRuntimeOwner(projectRoot, {
+        name: parsed.data.name,
+        aliases: parsed.data.aliases,
+        mentionPatterns: parsed.data.mentionPatterns,
+        ...(parsed.data.avatar !== undefined ? { avatar: parsed.data.avatar } : {}),
+        ...(parsed.data.color !== undefined ? { color: parsed.data.color } : {}),
+      });
+    } catch (err) {
+      reply.status(400);
+      return { error: err instanceof Error ? err.message : String(err) };
+    }
+
+    const next = collectConfigSnapshot();
+    try {
+      await auditLog.append({
+        type: AuditEventTypes.CONFIG_UPDATED,
+        data: {
+          target: 'owner',
+          operator,
+          name: next.owner.name,
+          mentionPatterns: next.owner.mentionPatterns,
+        },
+      });
+    } catch (err) {
+      request.log.warn({ err }, 'owner config audit append failed');
+    }
+
+    return { config: next };
   });
 
   app.get('/api/config/env-summary', async () => {

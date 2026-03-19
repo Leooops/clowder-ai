@@ -100,7 +100,7 @@ export function ProviderProfilesSummaryCard({
       </div>
       <p className="text-xs text-gray-500">secrets 存储在 `.cat-cafe/provider-profiles.secrets.local.json`（本机落盘，Git 忽略）</p>
       <p className="mt-1 text-xs text-amber-700">
-        Claude / Codex / Gemini 三项内置 OAuth 不可新增或删除，仅可管理可用模型和激活状态；Antigravity 不在此页配置。
+        Claude / Codex / Gemini 三项内置 OAuth 不可新增或删除，仅可管理可用模型和激活状态；Dare / OpenCode 可复用协议兼容的内置账号或自定义账号；Antigravity 不在此页配置。
       </p>
     </div>
   );
@@ -145,7 +145,7 @@ export function CreateApiKeyProfileSection({
         </div>
       </button>
       <p className="mt-2 text-sm leading-6 text-[#8A776B]">
-        仅支持新建 API Key 类型的账号配置。Claude / Codex / Gemini 三项内置 OAuth 订阅不可新增或删除，仅可管理可用模型和激活状态。
+        仅支持新建 API Key 类型的账号配置。Claude / Codex / Gemini 三项内置 OAuth 订阅不可新增或删除，仅可管理可用模型和激活状态；Dare / OpenCode 侧可复用协议兼容的内置账号或自定义账号。
       </p>
       {open ? (
         <div className="mt-4 space-y-3">

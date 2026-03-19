@@ -15,6 +15,8 @@ const CONFIG: ConfigData & {
     name: 'Co-worker',
     aliases: ['共创伙伴'],
     mentionPatterns: ['@co-worker', '@owner'],
+    avatar: '/avatars/owner-custom.png',
+    color: { primary: '#E29578', secondary: '#FFE4D6' },
   },
   cats: {
     opus: { displayName: '布偶猫', provider: 'anthropic', model: 'claude-opus-4-5-20250214', mcpSupport: true },
@@ -111,8 +113,9 @@ describe('CatOverviewTab', () => {
     );
     expect(html).toContain('Co-worker');
     expect(html).toContain('🔒 Owner');
-    expect(html).toContain('#D4A76A');
-    expect(html).toContain('只能编辑，不能新增或删除');
+    expect(html).toContain('#E29578');
+    expect(html).toContain('编辑 Owner');
+    expect(html).toContain('/avatars/owner-custom.png');
     expect(html.indexOf('Co-worker')).toBeLessThan(html.indexOf('布偶猫 · 宪宪'));
     expect(html).toContain('全部');
     expect(html).toContain('订阅');
@@ -131,6 +134,7 @@ describe('CatOverviewTab', () => {
     expect(html).toContain('编辑成员');
     expect(html).toContain('添加成员');
     expect(html).not.toContain('Owner 信息独立维护');
+    expect(html).not.toContain('只能编辑，不能新增或删除');
     expect(html).not.toContain('Locked');
     expect(html).not.toContain('border-dashed');
     expect(html).not.toContain('md:grid-cols-2');

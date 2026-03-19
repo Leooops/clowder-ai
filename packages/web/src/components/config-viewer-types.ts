@@ -2,6 +2,11 @@ export interface OwnerConfig {
   name: string;
   aliases: string[];
   mentionPatterns: string[];
+  avatar?: string;
+  color?: {
+    primary: string;
+    secondary: string;
+  };
 }
 
 export interface CatConfig {

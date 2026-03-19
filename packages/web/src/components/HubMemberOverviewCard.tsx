@@ -20,48 +20,68 @@ function getMetaSummary(cat: CatData, configCat?: CatConfig) {
 }
 
 function getStatusBadge(cat: CatData) {
-  if (cat.source === 'runtime') {
-    return {
-      label: '动态创建',
-      className: 'bg-[#F3E8FF] text-[#9D7BC7]',
-    };
-  }
   if (cat.roster?.available === false) {
     return {
+      enabled: false,
       label: '未启用',
       className: 'bg-slate-100 text-slate-600',
     };
   }
   return {
+    enabled: true,
     label: '已启用',
     className: 'bg-[#E8F5E9] text-[#4CAF50]',
   };
 }
 
-export function HubOwnerOverviewCard({ owner }: { owner: OwnerConfig }) {
+export function HubOwnerOverviewCard({
+  owner,
+  onEdit,
+}: {
+  owner: OwnerConfig;
+  onEdit?: () => void;
+}) {
+  const primary = owner.color?.primary ?? '#D4A76A';
+  const secondary = owner.color?.secondary ?? '#FFF8F0';
+
   return (
     <section
       className="rounded-[20px] px-[18px] py-[18px] shadow-sm"
-      style={{ backgroundColor: '#FFF8F0', border: '2px solid #D4A76A' }}
+      style={{ backgroundColor: secondary, border: `2px solid ${primary}` }}
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <span
-            className="flex h-8 w-8 items-center justify-center rounded-full text-[11px] font-bold text-white"
-            style={{ backgroundColor: '#D4A76A' }}
+          <div
+            className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full text-[11px] font-bold text-white"
+            style={{ backgroundColor: primary }}
           >
-            ME
-          </span>
+            {owner.avatar ? (
+              // biome-ignore lint/performance/noImgElement: owner avatar may be runtime upload URL
+              <img src={owner.avatar} alt={`${owner.name} avatar`} className="h-full w-full object-cover" />
+            ) : (
+              'ME'
+            )}
+          </div>
           <h3 className="text-base font-bold text-[#2D2118]">{owner.name} (铲屎官)</h3>
         </div>
-        <span className="rounded-full bg-[#FFF3E0] px-2.5 py-1 text-[11px] font-semibold text-[#E65100]">
-          🔒 Owner
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="rounded-full bg-[#FFF3E0] px-2.5 py-1 text-[11px] font-semibold text-[#E65100]">
+            🔒 Owner
+          </span>
+          <button
+            type="button"
+            onClick={() => onEdit?.()}
+            disabled={!onEdit}
+            className="rounded-lg bg-white/80 px-2.5 py-1 text-[11px] font-medium text-[#9A5A2C] transition hover:bg-white disabled:cursor-default disabled:opacity-100"
+          >
+            编辑 Owner
+          </button>
+        </div>
       </div>
-      <p className="mt-2.5 text-[13px] text-[#8A776B]">
-        别名: {owner.aliases.join(' · ') || '无'} · 只能编辑，不能新增或删除
+      <p className="mt-2.5 text-[13px] text-[#8A776B]">别名: {owner.aliases.join(' · ') || '无'}</p>
+      <p className="mt-2 text-[13px]" style={{ color: primary }}>
+        {owner.mentionPatterns.join('  ')}
       </p>
-      <p className="mt-2 text-[13px] text-[#D4A76A]">{owner.mentionPatterns.join('  ')}</p>
     </section>
   );
 }
@@ -86,15 +106,20 @@ export function HubMemberOverviewCard({
   cat,
   configCat,
   onEdit,
+  onToggleAvailability,
+  togglingAvailability = false,
 }: {
   cat: CatData;
   configCat?: CatConfig;
   onEdit?: (cat: CatData) => void;
+  onToggleAvailability?: (cat: CatData) => void;
+  togglingAvailability?: boolean;
 }) {
   const status = getStatusBadge(cat);
   const title = [cat.breedDisplayName ?? cat.displayName, cat.nickname].filter(Boolean).join(' · ');
   const subtitleParts = [cat.id];
   if (cat.roster?.lead) subtitleParts.push('Lead');
+  if (cat.source === 'runtime') subtitleParts.push('动态成员');
 
   return (
     <section
@@ -106,7 +131,15 @@ export function HubMemberOverviewCard({
           <h3 className="text-[17px] font-bold text-[#2D2118]">{title}</h3>
           <p className="mt-1 text-xs text-[#8A776B]">{subtitleParts.join(' · ')}</p>
         </div>
-        <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${status.className}`}>{status.label}</span>
+        <button
+          type="button"
+          onClick={() => onToggleAvailability?.(cat)}
+          disabled={!onToggleAvailability || togglingAvailability}
+          aria-pressed={status.enabled}
+          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${status.className} disabled:cursor-default`}
+        >
+          {togglingAvailability ? '切换中...' : status.label}
+        </button>
       </div>
 
       <p className="mt-2.5 text-[13px] text-[#8A776B]">{getMetaSummary(cat, configCat)}</p>

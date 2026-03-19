@@ -211,8 +211,8 @@ export function AccountSection({
       description="API Key 凭证在账号配置中管理；普通 Client 在此选择 Provider + 模型。若 Client=Antigravity，则直接配置 CLI 命令（默认值来自 cat-template）和模型。"
     >
       <p className="text-xs font-semibold leading-5 text-[#BF360C]">
-        ⚠️ 约束：Claude/Codex/Gemini = 同名 OAuth + 任意 API Key provider；其他 Client = 仅 API Key；Antigravity =
-        直接配置 CLI 命令 + model。
+        ⚠️ 约束：Claude/Codex/Gemini = 同名 OAuth + 任意 API Key provider；Dare/OpenCode = 同协议账号（OAuth-like /
+        API Key 都可）；Antigravity = 直接配置 CLI 命令 + model。
       </p>
       <div className="grid gap-4 md:grid-cols-3">
         <SelectField

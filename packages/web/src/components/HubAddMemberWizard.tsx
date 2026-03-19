@@ -10,7 +10,6 @@ import {
   clientLabel,
   FALLBACK_ANTIGRAVITY_ARGS,
   TEMPLATE_ANTIGRAVITY_MODELS,
-  StepBadge,
 } from './hub-add-member-wizard.parts';
 import type { ProfileItem, ProviderProfilesResponse } from './hub-provider-profiles.types';
 
@@ -46,7 +45,17 @@ export function HubAddMemberWizard({ open, onClose, onComplete }: HubAddMemberWi
     () => availableProfiles.find((profile) => profile.id === providerProfileId) ?? null,
     [availableProfiles, providerProfileId],
   );
-  const stepTwoTitle = client === 'antigravity' ? 'Step 2 配置 CLI Command' : 'Step 2 选择 Provider';
+  const stepTwoTitle = 'Step 2: 选择 Provider / 配置 CLI';
+
+  function profileSubtitle(profile: ProfileItem) {
+    if (profile.builtin && profile.authType === 'oauth') {
+      return '内置订阅账号，可直接从该账号的模型列表中创建成员';
+    }
+    if (profile.authType === 'api_key') {
+      return '自定义账号，可复用该账号下的模型能力';
+    }
+    return '选择具体账号后，再从该账号可用模型中继续创建';
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -143,14 +152,19 @@ export function HubAddMemberWizard({ open, onClose, onComplete }: HubAddMemberWi
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
       <div
-        className="w-full max-w-2xl rounded-[32px] border border-[#F0DDCD] bg-[#FFF8F2] shadow-2xl"
+        className="w-full max-w-[520px] rounded-[32px] border border-[#F0DDCD] bg-[#FFF8F2] shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-start justify-between border-b border-[#F0DDCD] px-7 py-5">
+        <div className="flex items-start justify-between px-7 pb-1 pt-7">
           <div>
-            <p className="text-xs font-semibold text-[#77A777]">成员协作 &gt; 总览 &gt; 添加成员</p>
-            <h3 className="mt-2 text-2xl font-bold text-[#2D2118]">添加成员流程</h3>
-            <p className="mt-1 text-sm text-[#8A776B]">先选运行方式，再进入成员配置页补充身份与路由信息。</p>
+            <p className="text-[13px] font-semibold text-[#D18A61]">成员协作 &gt; 总览 &gt; 添加成员</p>
+            <h3 className="mt-2 text-2xl font-bold leading-[1.2] text-[#2D2118]">
+              选择 Client + Provider + 模型 → 创建成员（Antigravity 改为 CLI 命令 + 模型）
+            </h3>
+            <p className="mt-2 text-[15px] leading-6 text-[#8A776B]">
+              API Key 凭证在账号配置中管理；普通 Client 在此选择 Provider + 模型。若 Client=Antigravity，则直接配置
+              CLI 命令（默认值来自 cat-template）和模型。
+            </p>
           </div>
           <button type="button" onClick={onClose} className="text-2xl leading-none text-[#B59A88]" aria-label="关闭">
             ×
@@ -158,17 +172,11 @@ export function HubAddMemberWizard({ open, onClose, onComplete }: HubAddMemberWi
         </div>
 
         <div className="space-y-5 px-7 py-6">
-          <div className="flex flex-wrap gap-2">
-            <StepBadge active={step === 1} done={step > 1} label="Step 1 Client" />
-            <StepBadge active={step === 2} done={step > 2} label="Step 2 Provider / CLI" />
-            <StepBadge active={step === 3} done={false} label="Step 3 Model" />
-          </div>
-
           {step === 1 ? (
-            <section className="space-y-4 rounded-[24px] border border-[#F1E7DF] bg-[#FFFDFC] p-5">
+            <section className="space-y-4 rounded-[20px] border border-[#F1E7DF] bg-[#FFFDFC] p-[18px]">
               <div>
-                <h4 className="text-lg font-semibold text-[#2D2118]">Step 1 选择 Client</h4>
-                <p className="mt-1 text-sm text-[#8A776B]">普通成员走账号绑定；Antigravity 走桥接 CLI。</p>
+                <h4 className="text-[17px] font-bold text-[#2D2118]">Step 1: 选择 Client</h4>
+                <p className="mt-1 text-sm leading-6 text-[#7F7168]">选择要接入的 CLI 工具、Agent 平台或 Antigravity bridge</p>
               </div>
               {[CLIENT_ROW_1, CLIENT_ROW_2].map((row, index) => (
                 <div key={index} aria-label={`Client Row ${index + 1}`} className="grid gap-3 sm:grid-cols-3">
@@ -186,13 +194,13 @@ export function HubAddMemberWizard({ open, onClose, onComplete }: HubAddMemberWi
           ) : null}
 
           {step === 2 ? (
-            <section className="space-y-4 rounded-[24px] border border-[#F1E7DF] bg-[#FFFDFC] p-5">
+            <section className="space-y-4 rounded-[20px] border border-[#F1E7DF] bg-[#FFFDFC] p-[18px]">
               <div>
-                <h4 className="text-lg font-semibold text-[#2D2118]">{stepTwoTitle}</h4>
-                <p className="mt-1 text-sm text-[#8A776B]">
+                <h4 className="text-[17px] font-bold text-[#2D2118]">{stepTwoTitle}</h4>
+                <p className="mt-1 text-sm leading-6 text-[#7F7168]">
                   {client === 'antigravity'
-                    ? '默认值来自 Antigravity 模板。确认后进入模型选择。'
-                    : 'Provider 绑定的是具体账号配置，而不是抽象 provider。'}
+                    ? 'Client=Antigravity 时，直接配置 CLI 命令；默认值来自 cat-template。'
+                    : '普通 Client 先选具体账号，再从该账号的模型列表中继续创建成员。'}
                 </p>
               </div>
 
@@ -209,12 +217,12 @@ export function HubAddMemberWizard({ open, onClose, onComplete }: HubAddMemberWi
               ) : loadingProfiles ? (
                 <p className="text-sm text-[#8A776B]">账号配置加载中...</p>
               ) : availableProfiles.length > 0 ? (
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-3">
                   {availableProfiles.map((profile) => (
                     <ChoiceButton
                       key={profile.id}
                       label={profile.displayName}
-                      subtitle={`${profile.protocol ?? 'generic'} · ${profile.authType}`}
+                      subtitle={profileSubtitle(profile)}
                       selected={providerProfileId === profile.id}
                       onClick={() => handleProviderSelect(profile.id)}
                     />
@@ -229,10 +237,10 @@ export function HubAddMemberWizard({ open, onClose, onComplete }: HubAddMemberWi
           ) : null}
 
           {step === 3 ? (
-            <section className="space-y-4 rounded-[24px] border border-[#F1E7DF] bg-[#FFFDFC] p-5">
+            <section className="space-y-4 rounded-[20px] border border-[#F1E7DF] bg-[#FFFDFC] p-[18px]">
               <div>
-                <h4 className="text-lg font-semibold text-[#2D2118]">Step 3 选择 Model</h4>
-                <p className="mt-1 text-sm text-[#8A776B]">完成这一步后，会进入成员配置页继续补充身份、别名和高级参数。</p>
+                <h4 className="text-[17px] font-bold text-[#2D2118]">Step 3: 选择 Model</h4>
+                <p className="mt-1 text-sm leading-6 text-[#7F7168]">完成这一步后，会进入成员配置页继续补充身份、别名和高级参数。</p>
               </div>
 
               {client === 'antigravity' ? (

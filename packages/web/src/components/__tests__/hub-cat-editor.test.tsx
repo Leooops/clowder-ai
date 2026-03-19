@@ -313,7 +313,7 @@ describe('HubCatEditor', () => {
     expect(optionLabels).not.toContain('Claude Sponsor');
   });
 
-  it('filters Dare/OpenCode profiles to api_key accounts only', () => {
+  it('filters Dare/OpenCode profiles to same-protocol accounts regardless of auth type', () => {
     const profiles = [
       {
         id: 'claude-oauth',
@@ -373,8 +373,11 @@ describe('HubCatEditor', () => {
       },
     ];
 
-    expect(filterProfiles('dare', profiles).map((profile) => profile.id)).toEqual(['codex-sponsor']);
-    expect(filterProfiles('opencode', profiles).map((profile) => profile.id)).toEqual(['claude-sponsor']);
+    expect(filterProfiles('dare', profiles).map((profile) => profile.id)).toEqual(['codex-oauth', 'codex-sponsor']);
+    expect(filterProfiles('opencode', profiles).map((profile) => profile.id)).toEqual([
+      'claude-oauth',
+      'claude-sponsor',
+    ]);
   });
 
   it('preserves existing model when it is not listed in provider defaults', async () => {
@@ -534,7 +537,7 @@ describe('HubCatEditor', () => {
     expect(payload.providerProfileId).toBeUndefined();
   });
 
-  it('auto-binds opencode members to the available api_key provider', async () => {
+  it('auto-binds opencode members to the first available same-protocol provider', async () => {
     const existingCat = {
       id: 'runtime-opencode',
       name: 'runtime-opencode',
@@ -601,7 +604,7 @@ describe('HubCatEditor', () => {
     });
     await flushEffects();
 
-    expect(queryField<HTMLSelectElement>(container, 'select[aria-label="Provider"]').value).toBe('claude-sponsor');
+    expect(queryField<HTMLSelectElement>(container, 'select[aria-label="Provider"]').value).toBe('claude-oauth');
 
     const saveButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === '保存修改');
     await act(async () => {
@@ -614,7 +617,7 @@ describe('HubCatEditor', () => {
     );
     expect(patchCall).toBeTruthy();
     const payload = JSON.parse(String(patchCall?.[1]?.body));
-    expect(payload.providerProfileId).toBe('claude-sponsor');
+    expect(payload.providerProfileId).toBe('claude-oauth');
   });
 
   it('blocks saving opencode members until provider profiles finish loading', async () => {
@@ -705,7 +708,7 @@ describe('HubCatEditor', () => {
     await flushEffects();
     await flushEffects();
 
-    expect(queryField<HTMLSelectElement>(container, 'select[aria-label="Provider"]').value).toBe('claude-sponsor');
+    expect(queryField<HTMLSelectElement>(container, 'select[aria-label="Provider"]').value).toBe('claude-oauth');
     expect((saveButton as HTMLButtonElement).disabled).toBe(false);
   });
 

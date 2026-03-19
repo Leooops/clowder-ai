@@ -97,6 +97,8 @@ export function collectConfigSnapshot(): ConfigSnapshot {
       name: owner.name,
       aliases: [...owner.aliases],
       mentionPatterns: [...owner.mentionPatterns],
+      ...(owner.avatar ? { avatar: owner.avatar } : {}),
+      ...(owner.color ? { color: owner.color } : {}),
     },
     context: {
       maxMessages,

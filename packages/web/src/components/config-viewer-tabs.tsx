@@ -29,17 +29,23 @@ export function CatOverviewTab({
   config,
   cats,
   onAddMember,
+  onEditOwner,
   onEditMember,
+  onToggleAvailability,
+  togglingCatId,
 }: {
   config: ConfigData;
   cats: CatData[];
   onAddMember?: () => void;
+  onEditOwner?: () => void;
   onEditMember?: (cat: CatData) => void;
+  onToggleAvailability?: (cat: CatData) => void;
+  togglingCatId?: string | null;
 }) {
   return (
     <div className="space-y-3">
       <HubOverviewToolbar onAddMember={onAddMember} />
-      {config.owner ? <HubOwnerOverviewCard owner={config.owner} /> : null}
+      {config.owner ? <HubOwnerOverviewCard owner={config.owner} onEdit={onEditOwner} /> : null}
       <div className="space-y-3">
         {cats.map((catData) => (
           <HubMemberOverviewCard
@@ -47,6 +53,8 @@ export function CatOverviewTab({
             cat={catData}
             configCat={config.cats[catData.id]}
             onEdit={onEditMember}
+            onToggleAvailability={onToggleAvailability}
+            togglingAvailability={togglingCatId === catData.id}
           />
         ))}
       </div>

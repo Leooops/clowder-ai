@@ -148,10 +148,10 @@ describe('HubAddMemberWizard', () => {
     expect(queryField(container, '[aria-label="Client Row 2"]').textContent).toContain('Antigravity');
 
     await click(queryButton(container, 'Codex'));
-    expect(container.textContent).toContain('Step 2 选择 Provider');
+    expect(container.textContent).toContain('Step 2: 选择 Provider / 配置 CLI');
 
     await click(queryButton(container, 'Codex Sponsor'));
-    expect(container.textContent).toContain('Step 3 选择 Model');
+    expect(container.textContent).toContain('Step 3: 选择 Model');
 
     await click(queryButton(container, 'gpt-5.4-mini'));
     await click(queryButton(container, '进入成员配置'));
@@ -170,13 +170,13 @@ describe('HubAddMemberWizard', () => {
     await flushEffects();
 
     await click(queryButton(container, 'Antigravity'));
-    expect(container.textContent).toContain('Step 2 配置 CLI Command');
+    expect(container.textContent).toContain('Step 2: 选择 Provider / 配置 CLI');
 
     const cliInput = queryField<HTMLInputElement>(container, 'input[aria-label="CLI Command"]');
     expect(cliInput.value).toBe('. --remote-debugging-port=9000');
 
     await click(queryButton(container, '下一步'));
-    expect(container.textContent).toContain('Step 3 选择 Model');
+    expect(container.textContent).toContain('Step 3: 选择 Model');
 
     await click(queryButton(container, 'gemini-3.1-pro'));
     await click(queryButton(container, '进入成员配置'));

@@ -14,148 +14,21 @@ import { HubCatEditor } from './HubCatEditor';
 import { HubEnvFilesTab } from './HubEnvFilesTab';
 import { HubGovernanceTab } from './HubGovernanceTab';
 import { HubLeaderboardTab } from './HubLeaderboardTab';
+import { HubOwnerEditor } from './HubOwnerEditor';
 import { HubProviderProfilesTab } from './HubProviderProfilesTab';
 import { HubRoutingPolicyTab } from './HubRoutingPolicyTab';
-import { ChevronIcon, HubIcon } from './hub-icons';
+import {
+  AccordionSection,
+  ALL_TABS,
+  findGroupForTab,
+  HUB_GROUPS,
+  resolveRequestedHubTab,
+  type HubTabId,
+} from './cat-cafe-hub.navigation';
 import { PushSettingsPanel } from './PushSettingsPanel';
 import { VoiceSettingsPanel } from './VoiceSettingsPanel';
-export type HubTabId = string;
-
-/* ─── Group + tab data ─── */
-interface HubTab {
-  id: HubTabId;
-  label: string;
-  icon: string;
-}
-
-interface HubGroup {
-  id: string;
-  label: string;
-  icon: string;
-  color: string; // hex breed color
-  preview: string;
-  tabs: HubTab[];
-}
-
-const HUB_GROUPS: HubGroup[] = [
-  {
-    id: 'cats',
-    label: '成员协作',
-    icon: 'cat',
-    color: '#9B7EBD',
-    preview: '总览 · 能力 · 配额 · 排行',
-    tabs: [
-      { id: 'cats', label: '总览', icon: 'users' },
-      { id: 'capabilities', label: '能力中心', icon: 'sparkles' },
-      { id: 'routing', label: '配额看板', icon: 'chart-pie' },
-      { id: 'leaderboard', label: '排行榜', icon: 'trophy' },
-    ],
-  },
-  {
-    id: 'settings',
-    label: '系统配置',
-    icon: 'settings',
-    color: '#E29578',
-    preview: '账号 · 语音 · 通知',
-    tabs: [
-      { id: 'system', label: '系统配置', icon: 'settings' },
-      { id: 'env', label: '环境 & 文件', icon: 'folder' },
-      { id: 'provider-profiles', label: '账号配置', icon: 'user-cog' },
-      { id: 'voice', label: '语音设置', icon: 'mic' },
-      { id: 'notify', label: '通知', icon: 'bell' },
-    ],
-  },
-  {
-    id: 'monitor',
-    label: '监控与治理',
-    icon: 'activity',
-    color: '#5B9BD5',
-    preview: '治理 · 健康 · 救援 · 命令速查',
-    tabs: [
-      { id: 'governance', label: '治理看板', icon: 'shield' },
-      { id: 'health', label: '健康', icon: 'heart-pulse' },
-      { id: 'rescue', label: '布偶猫救援', icon: 'activity' },
-      { id: 'commands', label: '命令速查', icon: 'terminal' },
-    ],
-  },
-];
-
-const ALL_TABS = HUB_GROUPS.flatMap((g) => g.tabs);
-
-/** Find which group a tab belongs to */
-export function findGroupForTab(tabId: string): HubGroup | undefined {
-  return HUB_GROUPS.find((g) => g.tabs.some((t) => t.id === tabId));
-}
-
-export function resolveRequestedHubTab(requestedTab: string, getCatById: (catId: string) => unknown): HubTabId {
-  if (requestedTab === 'quota') return 'routing';
-  if (requestedTab === 'strategy') return 'cats';
-  if (getCatById(requestedTab)) return 'cats';
-  return requestedTab;
-}
-
-/* ─── Accordion section ─── */
-function AccordionSection({
-  group,
-  expanded,
-  activeTab,
-  onToggle,
-  onSelectTab,
-}: {
-  group: HubGroup;
-  expanded: boolean;
-  activeTab: HubTabId;
-  onToggle: () => void;
-  onSelectTab: (tabId: HubTabId) => void;
-}) {
-  return (
-    <div className="rounded-xl bg-white shadow-[0_1px_8px_rgba(0,0,0,0.03)]">
-      {/* Header */}
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50/50 rounded-xl transition-colors"
-      >
-        <span className="flex-shrink-0" style={{ color: group.color }}>
-          <HubIcon name={group.icon} className="w-5 h-5" />
-        </span>
-        <span className="font-semibold text-sm text-gray-900">{group.label}</span>
-        <span className="flex-1" />
-        {!expanded && (
-          <span className="text-xs text-gray-400 truncate max-w-[180px] hidden sm:inline">{group.preview}</span>
-        )}
-        <span
-          className="text-xs font-medium rounded-full px-1.5 py-0.5 min-w-[20px] text-center"
-          style={{ color: group.color, backgroundColor: `${group.color}15` }}
-        >
-          {group.tabs.length}
-        </span>
-        <ChevronIcon expanded={expanded} className="w-4 h-4 text-gray-400 flex-shrink-0" />
-      </button>
-
-      {/* Expanded sub-items */}
-      {expanded && (
-        <div className="pb-2 px-2">
-          {group.tabs.map((t) => {
-            const isActive = t.id === activeTab;
-            return (
-              <button
-                key={t.id}
-                onClick={() => onSelectTab(t.id)}
-                className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-left transition-colors text-sm"
-                style={isActive ? { backgroundColor: `${group.color}10`, color: group.color } : {}}
-              >
-                <span style={isActive ? { color: group.color } : { color: '#9ca3af' }}>
-                  <HubIcon name={t.icon} className="w-4 h-4" />
-                </span>
-                <span className={isActive ? 'font-medium' : 'text-gray-600'}>{t.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
+export { findGroupForTab, resolveRequestedHubTab } from './cat-cafe-hub.navigation';
+export type { HubTabId } from './cat-cafe-hub.navigation';
 
 /* ─── Main Hub modal ─── */
 export function CatCafeHub() {
@@ -174,8 +47,10 @@ export function CatCafeHub() {
   const [capTabEverOpened, setCapTabEverOpened] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [ownerEditorOpen, setOwnerEditorOpen] = useState(false);
   const [editingCat, setEditingCat] = useState<(typeof cats)[number] | null>(null);
   const [createDraft, setCreateDraft] = useState<Parameters<typeof HubCatEditor>[0]['draft']>(null);
+  const [togglingCatId, setTogglingCatId] = useState<string | null>(null);
 
   // P1 fix: Render-time state sync (React 18 "adjusting state on props change" pattern).
   // Avoids first-frame flash that useEffect would cause on deep-link opens.
@@ -222,6 +97,10 @@ export function CatCafeHub() {
     setEditorOpen(true);
   }, []);
 
+  const openOwnerEditor = useCallback(() => {
+    setOwnerEditorOpen(true);
+  }, []);
+
   const handleCreateFlowComplete = useCallback((draft: Parameters<typeof HubCatEditor>[0]['draft']) => {
     setCreateDraft(draft);
     setWizardOpen(false);
@@ -233,6 +112,10 @@ export function CatCafeHub() {
     setEditorOpen(false);
     setEditingCat(null);
     setCreateDraft(null);
+  }, []);
+
+  const closeOwnerEditor = useCallback(() => {
+    setOwnerEditorOpen(false);
   }, []);
 
   useEffect(() => {
@@ -258,6 +141,31 @@ export function CatCafeHub() {
   const handleEditorSaved = useCallback(async () => {
     await Promise.all([fetchData(), refresh()]);
   }, [fetchData, refresh]);
+
+  const handleToggleAvailability = useCallback(
+    async (cat: (typeof cats)[number]) => {
+      setTogglingCatId(cat.id);
+      setFetchError(null);
+      try {
+        const res = await apiFetch(`/api/cats/${cat.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ available: cat.roster?.available === false }),
+        });
+        if (!res.ok) {
+          const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+          setFetchError((payload.error as string) ?? `成员状态切换失败 (${res.status})`);
+          return;
+        }
+        await Promise.all([fetchData(), refresh()]);
+      } catch {
+        setFetchError('成员状态切换失败');
+      } finally {
+        setTogglingCatId(null);
+      }
+    },
+    [fetchData, refresh],
+  );
 
   useEffect(() => {
     if (open) fetchData();
@@ -320,7 +228,15 @@ export function CatCafeHub() {
             )}
             {tab === 'cats' &&
               (config ? (
-                <CatOverviewTab config={config} cats={cats} onAddMember={openAddMember} onEditMember={openEditMember} />
+                <CatOverviewTab
+                  config={config}
+                  cats={cats}
+                  onAddMember={openAddMember}
+                  onEditOwner={openOwnerEditor}
+                  onEditMember={openEditMember}
+                  onToggleAvailability={handleToggleAvailability}
+                  togglingCatId={togglingCatId}
+                />
               ) : !fetchError ? (
                 <p className="text-sm text-gray-400">加载中...</p>
               ) : null)}
@@ -344,6 +260,12 @@ export function CatCafeHub() {
         </div>
         <HubAddMemberWizard open={wizardOpen} onClose={() => setWizardOpen(false)} onComplete={handleCreateFlowComplete} />
         <HubCatEditor open={editorOpen} cat={editingCat} draft={createDraft} onClose={closeEditor} onSaved={handleEditorSaved} />
+        <HubOwnerEditor
+          open={ownerEditorOpen}
+          owner={config?.owner}
+          onClose={closeOwnerEditor}
+          onSaved={handleEditorSaved}
+        />
       </div>
     </div>
   );

@@ -7,6 +7,11 @@ export interface ConfigSnapshot {
     name: string;
     aliases: string[];
     mentionPatterns: string[];
+    avatar?: string;
+    color?: {
+      primary: string;
+      secondary: string;
+    };
   };
   context: {
     /** @deprecated Use perCatBudgets for actual limits. This is assembleContext default. */

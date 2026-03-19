@@ -200,6 +200,10 @@ export interface OwnerConfig {
   readonly aliases: readonly string[];
   /** Line-start mention patterns for routing detection (e.g. ["@owner", "@owner-alias"]) */
   readonly mentionPatterns: readonly string[];
+  /** Optional owner avatar shown in Hub and chat surfaces. */
+  readonly avatar?: string;
+  /** Optional owner palette for Hub/chat surfaces. */
+  readonly color?: CatColor;
 }
 
 /**

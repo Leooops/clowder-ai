@@ -10,7 +10,7 @@ export const TEMPLATE_ANTIGRAVITY_MODELS = ['gemini-3.1-pro', 'claude-opus-4-6']
 function cardClass(selected: boolean) {
   return selected
     ? 'border-[#D49266] bg-[#FFF2E7] text-[#A85E2C] shadow-sm'
-    : 'border-[#E8DCCF] bg-white/80 text-[#5C4B42] hover:border-[#D9C0A8]';
+    : 'border-[#E8DCCF] bg-[#F7F3F0] text-[#5C4B42] hover:border-[#D9C0A8]';
 }
 
 export function clientLabel(client: ClientValue) {
@@ -41,7 +41,7 @@ export function ChoiceButton({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-2xl border px-4 py-3 text-left transition ${cardClass(selected)}`}
+      className={`min-h-[86px] w-full rounded-2xl border px-4 py-3 text-left transition ${cardClass(selected)}`}
     >
       <div className="font-semibold">{label}</div>
       {subtitle ? <div className="mt-1 text-xs opacity-80">{subtitle}</div> : null}

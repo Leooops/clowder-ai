@@ -49,10 +49,9 @@ export function HubCatEditor({ cat, draft, open, onClose, onSaved }: HubCatEdito
   const availableProfiles = useMemo(() => filterProfiles(form.client, profiles), [form.client, profiles]);
   const selectedProfile = useMemo(() => availableProfiles.find((profile) => profile.id === form.providerProfileId) ?? null, [availableProfiles, form.providerProfileId]);
   const showCodexSettings = form.client === 'openai';
-  const requiresApiKeyBinding = form.client === 'dare' || form.client === 'opencode';
+  const requiresProviderBinding = form.client === 'dare' || form.client === 'opencode';
   const saveBlockedByProfileBinding =
-    requiresApiKeyBinding &&
-    (loadingProfiles || form.providerProfileId.trim().length === 0 || selectedProfile?.authType !== 'api_key');
+    requiresProviderBinding && (loadingProfiles || form.providerProfileId.trim().length === 0);
 
   useEffect(() => {
     if (!open) return;
@@ -157,10 +156,9 @@ export function HubCatEditor({ cat, draft, open, onClose, onSaved }: HubCatEdito
       setForm((prev) => (prev.providerProfileId === '' ? prev : { ...prev, providerProfileId: '' }));
       return;
     }
-    const requiresApiKeyBinding = form.client === 'dare' || form.client === 'opencode';
     setForm((prev) => {
       if (availableProfiles.length === 0) return prev;
-      if (prev.providerProfileId === '' && !requiresApiKeyBinding) return prev;
+      if (prev.providerProfileId === '' && form.client !== 'dare' && form.client !== 'opencode') return prev;
       const nextProfile =
         availableProfiles.find((profile) => profile.id === prev.providerProfileId) ?? availableProfiles[0] ?? null;
       if (!nextProfile) return prev;
@@ -199,7 +197,7 @@ export function HubCatEditor({ cat, draft, open, onClose, onSaved }: HubCatEdito
 
   const handleSave = async () => {
     if (saveBlockedByProfileBinding) {
-      setError(loadingProfiles ? 'Provider 列表加载中，请稍后保存' : 'Dare/OpenCode 需要绑定 API Key Provider 后才能保存');
+      setError(loadingProfiles ? 'Provider 列表加载中，请稍后保存' : 'Dare/OpenCode 需要绑定同协议账号后才能保存');
       return;
     }
     setSaving(true);

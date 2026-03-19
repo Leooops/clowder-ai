@@ -419,7 +419,7 @@ describe('cats routes runtime CRUD', { concurrency: false }, () => {
     assert.match(patchBody.error, /mention alias "@opus" is already used by cat "opus"/i);
   });
 
-  it('POST /api/cats requires providerProfileId for dare and opencode clients', async () => {
+  it('POST /api/cats still requires a concrete provider binding for dare and opencode clients', async () => {
     const projectRoot = createProjectRoot();
     process.env.CAT_TEMPLATE_PATH = join(projectRoot, 'cat-template.json');
 
@@ -451,7 +451,50 @@ describe('cats routes runtime CRUD', { concurrency: false }, () => {
 
     assert.equal(res.statusCode, 400);
     const body = JSON.parse(res.body);
-    assert.match(body.error, /requires an api_key provider profile/i);
+    assert.match(body.error, /requires a provider profile/i);
+  });
+
+  it('PATCH /api/cats/:id persists roster availability toggles for existing members', async () => {
+    const projectRoot = createProjectRoot();
+    process.env.CAT_TEMPLATE_PATH = join(projectRoot, 'cat-template.json');
+
+    const Fastify = (await import('fastify')).default;
+    const { catsRoutes } = await import('../dist/routes/cats.js');
+
+    const app = Fastify();
+    await app.register(catsRoutes);
+
+    const disableRes = await app.inject({
+      method: 'PATCH',
+      url: '/api/cats/opus',
+      headers: {
+        'content-type': 'application/json',
+        'x-cat-cafe-user': 'codex',
+      },
+      body: JSON.stringify({
+        available: false,
+      }),
+    });
+
+    assert.equal(disableRes.statusCode, 200);
+    const disableBody = JSON.parse(disableRes.body);
+    assert.equal(disableBody.cat.roster.available, false);
+
+    const enableRes = await app.inject({
+      method: 'PATCH',
+      url: '/api/cats/opus',
+      headers: {
+        'content-type': 'application/json',
+        'x-cat-cafe-user': 'codex',
+      },
+      body: JSON.stringify({
+        available: true,
+      }),
+    });
+
+    assert.equal(enableRes.statusCode, 200);
+    const enableBody = JSON.parse(enableRes.body);
+    assert.equal(enableBody.cat.roster.available, true);
   });
 
   it('DELETE /api/cats/:id removes runtime session-strategy override for deleted cat', async () => {

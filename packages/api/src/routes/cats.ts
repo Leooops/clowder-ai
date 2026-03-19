@@ -84,6 +84,7 @@ const updateCatSchema = z.object({
   caution: z.string().nullable().optional(),
   strengths: z.array(z.string().min(1)).optional(),
   sessionChain: z.boolean().optional(),
+  available: z.boolean().optional(),
   client: clientSchema.optional(),
   defaultModel: z.string().min(1).optional(),
   mcpSupport: z.boolean().optional(),
@@ -190,7 +191,7 @@ async function validateProviderBindingOrThrow(params: {
   }
   if (!trimmedProfileId) {
     if (params.client === 'dare' || params.client === 'opencode') {
-      throw new Error(`client "${params.client}" requires an api_key provider profile`);
+      throw new Error(`client "${params.client}" requires a provider profile`);
     }
     return;
   }
@@ -204,9 +205,6 @@ async function validateProviderBindingOrThrow(params: {
     throw new Error(
       `provider profile "${trimmedProfileId}" protocol "${profile.protocol}" is incompatible with client "${params.client}"`,
     );
-  }
-  if ((params.client === 'dare' || params.client === 'opencode') && profile.authType !== 'api_key') {
-    throw new Error(`client "${params.client}" requires an api_key provider profile`);
   }
   if (profile.models.length > 0 && !profile.models.includes(params.defaultModel)) {
     throw new Error(`model "${params.defaultModel}" is not available in provider profile "${trimmedProfileId}"`);
@@ -461,6 +459,7 @@ export const catsRoutes: FastifyPluginAsync<CatsRoutesOptions> = async (app, opt
             }
           : {}),
         ...(body.cli !== undefined ? { cli: body.cli } : {}),
+        ...(body.available !== undefined ? { available: body.available } : {}),
       });
 
       const resolved = await reconcileCatRegistry(projectRoot, managedIdsBefore, opts.onCatalogChanged);

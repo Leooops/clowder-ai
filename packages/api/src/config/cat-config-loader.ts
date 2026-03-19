@@ -175,6 +175,8 @@ const ownerConfigSchema = z.object({
   name: z.string().min(1),
   aliases: z.array(z.string().min(1)),
   mentionPatterns: z.array(mentionPatternSchema).min(1),
+  avatar: z.string().min(1).optional(),
+  color: colorSchema.optional(),
 });
 
 /** Version 1: breeds only (legacy) */
