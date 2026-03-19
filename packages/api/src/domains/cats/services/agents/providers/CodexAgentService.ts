@@ -19,6 +19,7 @@ import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { type CatId, createCatId } from '@cat-cafe/shared';
+import { getCatEffort } from '../../../../../config/cat-config-loader.js';
 import { getCatModel } from '../../../../../config/cat-models.js';
 import { getCodexApprovalPolicy, getCodexSandboxMode } from '../../../../../config/codex-cli.js';
 import { formatCliExitError } from '../../../../../utils/cli-format.js';
@@ -211,6 +212,8 @@ export class CodexAgentService implements AgentService {
     const sandboxMode = getCodexSandboxMode();
     const approvalPolicy = getCodexApprovalPolicy();
     const modelArgs = ['--model', effectiveModel];
+    const effortLevel = getCatEffort(this.catId as string);
+    const reasoningArgs = ['--config', `model_reasoning_effort="${effortLevel}"`];
     const approvalArgs = ['--config', `approval_policy="${approvalPolicy}"`];
     const catCafeMcpArgs = buildCatCafeMcpConfigArgs(options?.workingDirectory, options?.callbackEnv);
 
@@ -227,6 +230,7 @@ export class CodexAgentService implements AgentService {
           options.sessionId,
           '--json',
           ...modelArgs,
+          ...reasoningArgs,
           ...approvalArgs,
           ...catCafeMcpArgs,
           ...imageArgs,
@@ -236,6 +240,7 @@ export class CodexAgentService implements AgentService {
           'exec',
           '--json',
           ...modelArgs,
+          ...reasoningArgs,
           '--sandbox',
           sandboxMode,
           '--add-dir',
@@ -257,6 +262,8 @@ export class CodexAgentService implements AgentService {
       const authMode = getCodexAuthMode(options?.callbackEnv);
       const codexEnv = applyAuthMode(options?.callbackEnv ?? {}, authMode);
 
+      const semanticCompletionController = new AbortController();
+
       const cliOpts = {
         command: 'codex' as const,
         args,
@@ -269,6 +276,7 @@ export class CodexAgentService implements AgentService {
           ? { rawArchivePath: this.rawArchive.getPath(options.invocationId) }
           : {}),
         ...(options?.livenessProbe ? { livenessProbe: options.livenessProbe } : {}),
+        semanticCompletionSignal: semanticCompletionController.signal,
       };
       const events = options?.spawnCliOverride
         ? options.spawnCliOverride(cliOpts)
@@ -393,6 +401,7 @@ export class CodexAgentService implements AgentService {
         if (typeof event === 'object' && event !== null) {
           const raw = event as Record<string, unknown>;
           if (raw.type === 'turn.completed') {
+            semanticCompletionController.abort();
             const u = raw.usage as Record<string, unknown> | undefined;
             if (u) {
               const usage: TokenUsage = {};

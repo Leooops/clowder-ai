@@ -6,7 +6,7 @@
 
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { type CatConfig, catRegistry, type CatProvider, type ContextBudget, type RosterEntry } from '@cat-cafe/shared';
+import { type CatConfig, type CatProvider, type ContextBudget, catRegistry, type RosterEntry } from '@cat-cafe/shared';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { getRoster, loadCatConfig, toAllCatConfigs } from '../config/cat-config-loader.js';
@@ -134,7 +134,7 @@ function buildCatResponseMetadataResolver() {
   });
 }
 
-function defaultCliForClient(client: CatProvider) {
+function defaultCliForClient(client: CatProvider): { command: string; outputFormat: string } {
   switch (client) {
     case 'anthropic':
       return { command: 'claude', outputFormat: 'stream-json' };
@@ -148,6 +148,10 @@ function defaultCliForClient(client: CatProvider) {
       return { command: 'opencode', outputFormat: 'json' };
     case 'antigravity':
       return { command: 'antigravity', outputFormat: 'json' };
+    case 'a2a':
+      return { command: 'a2a', outputFormat: 'json' };
+    default:
+      return { command: client, outputFormat: 'json' };
   }
 }
 
@@ -164,6 +168,8 @@ function protocolForClient(client: CatProvider): 'anthropic' | 'openai' | 'googl
     case 'opencode':
       return 'anthropic';
     case 'antigravity':
+    case 'a2a':
+    default:
       return null;
   }
 }

@@ -44,7 +44,7 @@ print_manual_download_source_summary
 
 # ── Step 1: Check prerequisites ─────────────────────────────
 
-echo -e "${CYAN}[1/5] Checking prerequisites / 检查前置依赖...${NC}"
+echo -e "${CYAN}[1/6] Checking prerequisites / 检查前置依赖...${NC}"
 echo ""
 
 MISSING=()
@@ -106,7 +106,7 @@ fi
 # ── Step 2: Install packages ────────────────────────────────
 
 echo ""
-echo -e "${CYAN}[2/5] Installing packages / 安装依赖包...${NC}"
+echo -e "${CYAN}[2/6] Installing packages / 安装依赖包...${NC}"
 echo ""
 
 if [ -d "node_modules" ]; then
@@ -118,7 +118,7 @@ echo -e "  ${GREEN}✓${NC} Packages installed"
 # ── Step 3: Choose optional features ────────────────────────
 
 echo ""
-echo -e "${CYAN}[3/5] Optional features / 可选功能${NC}"
+echo -e "${CYAN}[3/6] Optional features / 可选功能${NC}"
 echo ""
 echo "Cat Cafe works with just a model API key."
 echo "猫猫咖啡只需一个模型 API Key 即可运行。"
@@ -241,7 +241,7 @@ echo ""
 
 # ── Step 4: Generate .env ───────────────────────────────────
 
-echo -e "${CYAN}[4/5] Generating .env / 生成配置文件...${NC}"
+echo -e "${CYAN}[4/6] Generating .env / 生成配置文件...${NC}"
 echo ""
 
 if [ -f .env ]; then
@@ -257,9 +257,9 @@ cat > "$ENV_FILE" <<ENVEOF
 # 由 setup.sh 自动生成
 
 # ── Core 核心 ────────────────────────────────────────────────
-FRONTEND_PORT=3003
-API_SERVER_PORT=3004
-NEXT_PUBLIC_API_URL=http://localhost:3004
+FRONTEND_PORT=3004
+API_SERVER_PORT=3003
+NEXT_PUBLIC_API_URL=http://localhost:3003
 REDIS_PORT=6379
 REDIS_URL=redis://localhost:6379
 
@@ -367,16 +367,39 @@ install_sidecar_venvs() {
 
 if [ "$INSTALL_MISSING" = true ] && [ "$HAS_PYTHON" = true ]; then
     echo ""
-    echo -e "${CYAN}[4b/5] Installing sidecar venvs / 安装语音服务依赖...${NC}"
+    echo -e "${CYAN}[4b/6] Installing sidecar venvs / 安装语音服务依赖...${NC}"
     echo ""
     install_sidecar_venvs
     echo -e "  ${GREEN}✓${NC} Sidecar venvs installed"
 fi
 
-# ── Step 5: Summary ─────────────────────────────────────────
+# ── Step 5: Link skills (ADR-009) ───────────────────────────
 
 echo ""
-echo -e "${CYAN}[5/5] Setup complete! / 安装完成！${NC}"
+echo -e "${CYAN}[5/6] Linking skills / 链接技能包...${NC}"
+echo ""
+
+SKILLS_SOURCE="$PROJECT_DIR/cat-cafe-skills"
+if [[ -d "$SKILLS_SOURCE" ]]; then
+    for tdir in "$HOME/.claude/skills" "$HOME/.codex/skills" "$HOME/.gemini/skills"; do
+        mkdir -p "$tdir"
+        for sd in "$SKILLS_SOURCE"/*/; do
+            [[ -d "$sd" ]] || continue
+            sn=$(basename "$sd")
+            [[ "$sn" == "refs" ]] && continue
+            ln -sfn "$sd" "$tdir/$sn"
+        done
+    done
+    echo -e "  ${GREEN}✓${NC} Skills linked to ~/.claude/skills, ~/.codex/skills, ~/.gemini/skills"
+else
+    echo -e "  ${YELLOW}⚠${NC} cat-cafe-skills/ not found — skills will not be available"
+    echo "     You can link them later by re-running this script after cloning cat-cafe-skills."
+fi
+
+# ── Step 6: Summary ─────────────────────────────────────────
+
+echo ""
+echo -e "${CYAN}[6/6] Setup complete! / 安装完成！${NC}"
 echo ""
 echo "=================================="
 echo -e "${GREEN}🎉 Cat Cafe is ready!${NC}"
@@ -400,8 +423,8 @@ else
     echo "       启动（无 Redis）: pnpm start --memory"
 fi
 echo ""
-echo "    3. Open http://localhost:3003"
-echo "       打开 http://localhost:3003"
+echo "    3. Open http://localhost:3004"
+echo "       打开 http://localhost:3004"
 echo ""
 
 if [ "$ENABLE_ASR" = true ] || [ "$ENABLE_TTS" = true ] || [ "$ENABLE_LLM_PP" = true ]; then

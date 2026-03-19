@@ -4,6 +4,7 @@ related_features: [F062, F061, F004, F033, F051]
 topics: [hub, template, cat-management, account-profile, runtime, antigravity]
 doc_kind: spec
 created: 2026-03-18
+community_issue: "#109"
 ---
 
 # F127: 猫猫管理重构 — 账户配置与猫猫实例分离，支持动态创建猫 + 自定义别名 @ 路由
