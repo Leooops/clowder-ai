@@ -25,12 +25,26 @@ function Get-ToolCommandCandidates {
     return @($candidates | Where-Object { $_ } | Select-Object -Unique)
 }
 
+function Test-ToolCommandCandidate {
+    param([string]$Candidate)
+    try {
+        & $Candidate "--version" 1>$null 2>$null
+        $exitCode = $LASTEXITCODE
+        if ($null -eq $exitCode) { return $true }
+        return $exitCode -eq 0
+    } catch {
+        return $false
+    }
+}
+
 function Resolve-ToolCommand {
     param([string]$Name)
     foreach ($candidate in (Get-ToolCommandCandidates -Name $Name)) {
         if (Test-Path $candidate) {
-            Add-ProcessPathPrefix -Directory (Split-Path -Parent $candidate)
-            return $candidate
+            if (Test-ToolCommandCandidate -Candidate $candidate) {
+                Add-ProcessPathPrefix -Directory (Split-Path -Parent $candidate)
+                return $candidate
+            }
         }
     }
     $toolCommand = Get-Command $Name -ErrorAction SilentlyContinue

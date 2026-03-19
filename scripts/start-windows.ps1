@@ -158,6 +158,7 @@ $redisLayout = Resolve-PortableRedisLayout -ProjectRoot $ProjectRoot
 $redisCliPath = $null
 $redisServerPath = $null
 $redisSource = $null
+$redisAuthArgs = @()
 $redisLogFile = Join-Path $redisLayout.Logs "redis-$RedisPort.log"
 $redisPidFile = Join-Path $redisLayout.Data "redis-$RedisPort.pid"
 $configuredRedisUrl = if ($env:REDIS_URL) { $env:REDIS_URL.Trim() } else { "" }
@@ -427,7 +428,7 @@ try {
 
     if ($startedRedis) {
         try {
-            & $redisCliPath -p $RedisPort shutdown save 2>$null
+            & $redisCliPath -p $RedisPort @redisAuthArgs shutdown save 2>$null
             Write-Ok "Redis stopped"
         } catch {
             Write-Warn "Could not stop Redis gracefully"

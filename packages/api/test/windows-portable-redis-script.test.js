@@ -160,6 +160,12 @@ test('Windows tool resolution prefers explicit shim candidates before generic Ge
   assert.ok(candidatesIndex < getCommandIndex, 'expected shim candidates to be preferred before generic Get-Command lookup');
 });
 
+test('Windows tool resolution validates shim candidates before returning the first existing path', () => {
+  assert.match(commandHelpersScript, /function Test-ToolCommandCandidate/);
+  assert.match(commandHelpersScript, /& \$Candidate "--version" 1>\$null 2>\$null/);
+  assert.match(commandHelpersScript, /if \(Test-ToolCommandCandidate -Candidate \$candidate\) \{/);
+});
+
 test('Windows installer uses interactive selectors instead of typed or letter-based menus', () => {
   assert.match(uiHelpersScript, /function Select-InstallerChoice/);
   assert.match(uiHelpersScript, /function Select-InstallerMultiChoice/);
@@ -483,4 +489,5 @@ test('Windows startup passes localhost REDIS_URL auth into redis-server auto-sta
     pingMatches && pingMatches.length >= 2,
     `Expected authenticated redis-cli ping in both already-running and auto-start branches, found ${pingMatches ? pingMatches.length : 0}`,
   );
+  assert.match(startWindowsScript, /& \$redisCliPath -p \$RedisPort @redisAuthArgs shutdown save 2>\$null/);
 });
