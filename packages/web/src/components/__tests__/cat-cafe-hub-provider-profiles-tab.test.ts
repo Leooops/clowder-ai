@@ -456,9 +456,17 @@ describe('CatCafeHub provider profiles tab', () => {
     expect(container.textContent).toContain('系统配置 > 账号配置');
     expect(container.textContent).toContain('+ 新建 API Key 账号');
     expect(container.textContent).not.toContain('默认/覆盖模型');
-    expect(container.querySelector('input[placeholder="Base URL"]')).toBeTruthy();
-    expect(container.querySelector('input[placeholder="API Key"]')).toBeTruthy();
-    expect(container.textContent).toContain('+ 添加');
+
+    // Form is collapsed by default — expand it
+    const expandButton = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent?.includes('新建 API Key 账号'),
+    )!;
+    await act(async () => { expandButton.click(); });
+    await flushEffects();
+
+    expect(container.querySelector('input[placeholder*="API 服务地址"]')).toBeTruthy();
+    expect(container.querySelector('input[placeholder*="sk-"]')).toBeTruthy();
+    expect(container.textContent).toContain('+ 添加模型');
 
     const profileList = container.querySelector('[aria-label="Provider Profile List"]');
     expect(profileList?.textContent).not.toContain('Antigravity');
@@ -510,11 +518,18 @@ describe('CatCafeHub provider profiles tab', () => {
     });
     await flushEffects();
 
+    // Expand the collapsed create form
+    const expandButton = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent?.includes('新建 API Key 账号'),
+    )!;
+    await act(async () => { expandButton.click(); });
+    await flushEffects();
+
     const displayNameInput = container.querySelector(
-      'input[placeholder="账号显示名（例如 my-glm）"]',
+      'input[placeholder*="账号显示名"]',
     ) as HTMLInputElement;
-    const baseUrlInput = container.querySelector('input[placeholder="Base URL"]') as HTMLInputElement;
-    const apiKeyInput = container.querySelector('input[placeholder="API Key"]') as HTMLInputElement;
+    const baseUrlInput = container.querySelector('input[placeholder*="API 服务地址"]') as HTMLInputElement;
+    const apiKeyInput = container.querySelector('input[placeholder*="sk-"]') as HTMLInputElement;
     const createButton = queryButton(container, '创建');
 
     await changeField(displayNameInput, 'Sponsor Gemini');
@@ -579,25 +594,32 @@ describe('CatCafeHub provider profiles tab', () => {
     });
     await flushEffects();
 
+    // Expand the collapsed create form
+    const expandButton = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent?.includes('新建 API Key 账号'),
+    )!;
+    await act(async () => { expandButton.click(); });
+    await flushEffects();
+
     const displayNameInput = container.querySelector(
-      'input[placeholder="账号显示名（例如 my-glm）"]',
+      'input[placeholder*="账号显示名"]',
     ) as HTMLInputElement;
-    const baseUrlInput = container.querySelector('input[placeholder="Base URL"]') as HTMLInputElement;
-    const apiKeyInput = container.querySelector('input[placeholder="API Key"]') as HTMLInputElement;
+    const baseUrlInput = container.querySelector('input[placeholder*="API 服务地址"]') as HTMLInputElement;
+    const apiKeyInput = container.querySelector('input[placeholder*="sk-"]') as HTMLInputElement;
 
     await changeField(displayNameInput, 'Sponsor Gemini');
     await changeField(baseUrlInput, 'https://llm.sponsor.example/v1');
     await changeField(apiKeyInput, 'sk-test');
 
     const addButtons = Array.from(container.querySelectorAll('button')).filter(
-      (button) => button.textContent?.trim() === '+ 添加',
+      (button) => button.textContent?.trim() === '+ 添加模型',
     );
     const createFormAddButton = addButtons[addButtons.length - 1] as HTMLButtonElement;
     await act(async () => {
       createFormAddButton.click();
     });
 
-    const tagDraftInput = container.querySelector('input[placeholder="输入模型名"]') as HTMLInputElement;
+    const tagDraftInput = container.querySelector('input[placeholder*="输入模型名"]') as HTMLInputElement;
     await changeField(tagDraftInput, 'gemini-2.5-pro');
 
     const confirmAddButton = Array.from(container.querySelectorAll('button')).find(

@@ -48,22 +48,27 @@ export function IdentitySection({
     <SectionCard title="身份信息">
       {!cat ? (
         <div className="space-y-2">
-          <TextField label="Cat ID" value={form.catId} onChange={(value) => onChange({ catId: value })} />
+          <TextField label="Cat ID" value={form.catId} onChange={(value) => onChange({ catId: value })} required placeholder="唯一标识符，如 new-cat" />
           <TextField
-            label="Name"
+            label="名称"
+            ariaLabel="Name"
             value={form.name}
             onChange={(value) => onChange({ name: value, displayName: value })}
+            required
+            placeholder="成员显示名称，如 我的助手"
           />
         </div>
       ) : (
-        <TextField label="Name" value={form.name} onChange={(value) => onChange({ name: value, displayName: value })} />
+        <TextField label="名称" ariaLabel="Name" value={form.name} onChange={(value) => onChange({ name: value, displayName: value })} />
       )}
 
-      <TextField label="Nickname" value={form.nickname} onChange={(value) => onChange({ nickname: value })} />
+      <TextField label="昵称" ariaLabel="Nickname" value={form.nickname} onChange={(value) => onChange({ nickname: value })} placeholder="可选，铲屎官给的昵称" />
       <TextField
-        label="Description"
+        label="角色描述"
+        ariaLabel="Description"
         value={form.roleDescription}
         onChange={(value) => onChange({ roleDescription: value })}
+        placeholder="角色定位，如 代码审查专家"
       />
 
       <div className="flex items-center gap-3">
@@ -129,16 +134,19 @@ export function IdentitySection({
       </div>
 
       <TextField
-        label="Team Strengths"
+        label="擅长领域"
+        ariaLabel="Team Strengths"
         value={form.teamStrengths}
         onChange={(value) => onChange({ teamStrengths: value })}
+        placeholder="如 架构设计、安全分析"
       />
-      <TextField label="Personality" value={form.personality} onChange={(value) => onChange({ personality: value })} />
+      <TextField label="性格特征" ariaLabel="Personality" value={form.personality} onChange={(value) => onChange({ personality: value })} placeholder="如 温柔但有主见" />
       <TextField
-        label="Caution"
+        label="注意事项"
+        ariaLabel="Caution"
         value={form.caution}
         onChange={(value) => onChange({ caution: value })}
-        placeholder="(无)"
+        placeholder="可选，留空表示无特殊注意"
       />
 
       <div className="flex items-start gap-3">
@@ -191,6 +199,7 @@ export function AccountSection({
           value={form.client}
           options={CLIENT_OPTIONS}
           onChange={(value) => onChange({ client: value as HubCatEditorFormState['client'] })}
+          required
         />
 
         {form.client === 'antigravity' ? (
@@ -199,11 +208,15 @@ export function AccountSection({
               label="CLI Command"
               value={form.commandArgs}
               onChange={(value) => onChange({ commandArgs: value })}
+              required
+              placeholder="启动命令参数"
             />
             <TextField
               label="Model"
               value={form.defaultModel}
               onChange={(value) => onChange({ defaultModel: value })}
+              required
+              placeholder="模型标识符"
             />
           </>
         ) : (
@@ -212,7 +225,7 @@ export function AccountSection({
               label="Provider"
               value={form.accountRef}
               options={[
-                { value: '', label: loadingProfiles ? '加载中…' : '请选择' },
+                { value: '', label: loadingProfiles ? '加载中…' : '请选择认证方式' },
                 ...accountOptions.map((profile) => ({
                   value: profile.id,
                   label: profile.builtin ? `${profile.displayName}（内置）` : `${profile.displayName}（API Key）`,
@@ -220,6 +233,7 @@ export function AccountSection({
               ]}
               onChange={(value) => onChange({ accountRef: value, defaultModel: '' })}
               disabled={loadingProfiles}
+              required
             />
             {modelOptions.length > 0 ? (
               <SelectField
@@ -227,12 +241,15 @@ export function AccountSection({
                 value={form.defaultModel}
                 options={modelOptions.map((model) => ({ value: model, label: model }))}
                 onChange={(value) => onChange({ defaultModel: value })}
+                required
               />
             ) : (
               <TextField
                 label="Model"
                 value={form.defaultModel}
                 onChange={(value) => onChange({ defaultModel: value })}
+                required
+                placeholder="模型标识符，如 claude-sonnet-4-5"
               />
             )}
           </>

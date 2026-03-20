@@ -1389,9 +1389,9 @@ describe('HubCatEditor', () => {
     });
     await flushEffects();
 
-    expect(container.textContent).toContain('Nickname');
-    expect(container.textContent).toContain('Team Strengths');
-    expect(container.textContent).toContain('Caution');
+    expect(container.textContent).toContain('昵称');
+    expect(container.textContent).toContain('擅长领域');
+    expect(container.textContent).toContain('注意事项');
     expect(container.textContent).toContain('Strengths');
     expect(container.textContent).toContain('▸ Voice Config (点击展开)');
     expect(container.textContent).toContain('别名与 @ 路由');

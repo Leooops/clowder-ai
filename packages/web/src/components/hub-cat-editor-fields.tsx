@@ -4,17 +4,19 @@ import type { HTMLAttributes, ReactNode } from 'react';
 
 function FieldShell({
   label,
+  required = false,
   tone = 'neutral',
   children,
 }: {
   label: string;
+  required?: boolean;
   tone?: 'neutral' | 'success';
   children: ReactNode;
 }) {
   const labelColor = tone === 'success' ? 'text-[#5B7A5C]' : 'text-[#8A776B]';
   return (
     <label className="flex flex-col gap-1.5 text-[#5C4B42] sm:flex-row sm:items-center sm:gap-3">
-      <span className={`text-[13px] font-semibold ${labelColor} sm:w-[140px] sm:shrink-0`}>{label}</span>
+      <span className={`text-[13px] font-semibold ${labelColor} sm:w-[140px] sm:shrink-0`}>{label}{required && <span className="ml-0.5 text-[#E29578]">*</span>}</span>
       <div className="min-w-0 flex-1">{children}</div>
     </label>
   );
@@ -50,6 +52,7 @@ export function TextField({
   onChange,
   inputMode,
   placeholder,
+  required = false,
   tone = 'neutral',
 }: {
   label: string;
@@ -58,6 +61,7 @@ export function TextField({
   onChange: (value: string) => void;
   inputMode?: HTMLAttributes<HTMLInputElement>['inputMode'];
   placeholder?: string;
+  required?: boolean;
   tone?: 'neutral' | 'success';
 }) {
   const inputColors =
@@ -65,14 +69,15 @@ export function TextField({
       ? 'border-[#CFE5D5] bg-[#E8F5E9] focus:border-[#77A777] focus:ring-[#CFE5D5]'
       : 'border-[#E8DCCF] bg-[#F7F3F0] focus:border-[#D49266] focus:ring-[#F5D2B8]';
   return (
-    <FieldShell label={label} tone={tone}>
+    <FieldShell label={label} required={required} tone={tone}>
       <input
         aria-label={ariaLabel ?? label}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className={`w-full rounded-[10px] border px-3.5 py-2 text-[14px] leading-5 text-[#2D2118] outline-none transition focus:ring-2 ${inputColors}`}
+        className={`w-full rounded-[10px] border px-3.5 py-2 text-[14px] leading-5 text-[#2D2118] placeholder:text-[#C4B5A8] outline-none transition focus:ring-2 ${inputColors}`}
         inputMode={inputMode}
         placeholder={placeholder}
+        required={required}
       />
     </FieldShell>
   );
@@ -117,6 +122,7 @@ export function SelectField({
   options,
   onChange,
   disabled = false,
+  required = false,
   tone = 'neutral',
 }: {
   label: string;
@@ -125,6 +131,7 @@ export function SelectField({
   options: Array<{ value: string; label: string }>;
   onChange: (value: string) => void;
   disabled?: boolean;
+  required?: boolean;
   tone?: 'neutral' | 'success';
 }) {
   const inputColors =
@@ -132,12 +139,13 @@ export function SelectField({
       ? 'border-[#CFE5D5] bg-[#E8F5E9] focus:border-[#77A777] focus:ring-[#CFE5D5]'
       : 'border-[#E8DCCF] bg-[#F7F3F0] focus:border-[#D49266] focus:ring-[#F5D2B8]';
   return (
-    <FieldShell label={label} tone={tone}>
+    <FieldShell label={label} required={required} tone={tone}>
       <select
         aria-label={ariaLabel ?? label}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         disabled={disabled}
+        required={required}
         className={`w-full rounded-[10px] border px-3.5 py-2 text-[14px] leading-5 text-[#2D2118] outline-none transition focus:ring-2 disabled:cursor-not-allowed disabled:opacity-60 ${inputColors}`}
       >
         {options.map((option) => (
