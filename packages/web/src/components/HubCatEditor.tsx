@@ -381,9 +381,6 @@ export function HubCatEditor({ cat, draft, open, onClose, onSaved }: HubCatEdito
             <p className="text-[13px] font-semibold text-[#77A777]">
               成员协作 &gt; 总览 &gt; {cat ? '编辑成员' : '添加成员'}
             </p>
-            <p className="mt-2 text-[15px] leading-6 text-[#8A776B]">
-              身份信息、认证账号、模型与 @ 路由统一在这里维护。
-            </p>
           </div>
           <div className="flex items-center gap-2">
             {cat && cat.source === 'runtime' ? (

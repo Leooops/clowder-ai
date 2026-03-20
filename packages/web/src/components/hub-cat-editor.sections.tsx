@@ -60,28 +60,29 @@ export function IdentitySection({
         <TextField label="Name" value={form.name} onChange={(value) => onChange({ name: value, displayName: value })} />
       )}
 
-      <div className="space-y-2 rounded-[10px] border border-[#E8DCCF] bg-[#F7F3F0] px-4 py-3 sm:ml-[152px]">
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-[13px] font-semibold text-[#8A776B]">Avatar</span>
-          <span className="text-xs text-[#8A776B]">点击上传新头像覆盖</span>
-        </div>
+      <TextField label="Nickname" value={form.nickname} onChange={(value) => onChange({ nickname: value })} />
+      <TextField
+        label="Description"
+        value={form.roleDescription}
+        onChange={(value) => onChange({ roleDescription: value })}
+      />
+
+      <div className="flex items-center gap-3">
+        <span className="w-[140px] shrink-0 text-[13px] font-medium text-[#5C4B42]">Avatar</span>
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className="flex w-full items-center gap-3 rounded-[10px] border border-[#E8DCCF] bg-white/90 p-3 text-left transition hover:border-[#D49266]"
+          className="flex items-center gap-2 rounded-lg border border-[#E8DCCF] bg-[#F7F3F0] px-3 py-1.5 text-sm text-[#5C4B42] transition hover:border-[#D49266]"
         >
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#E8DCCF] bg-[#F7F3F0] text-xs text-[#8A776B]">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#E8DCCF] bg-white text-[10px] text-[#8A776B]">
             {form.avatar ? (
               // biome-ignore lint/performance/noImgElement: avatar path may be runtime upload URL
               <img src={form.avatar} alt="Avatar preview" className="h-full w-full object-cover" />
             ) : (
-              'Avatar'
+              '🐱'
             )}
           </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-[#2D2118]">{avatarUploading ? '上传中…' : '点击上传头像'}</p>
-            <p className="mt-1 text-xs text-[#8A776B]">支持 png / jpg / webp，上传后自动回填</p>
-          </div>
+          <span>{avatarUploading ? '上传中…' : '点击上传'}</span>
         </button>
         <input
           ref={fileInputRef}
@@ -104,15 +105,12 @@ export function IdentitySection({
         />
       </div>
 
-      <div className="space-y-2 rounded-[10px] border border-[#E8DCCF] bg-[#F7F3F0] px-4 py-3 sm:ml-[152px]">
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-[13px] font-semibold text-[#8A776B]">Background Color</span>
-          <span className="text-xs text-[#8A776B]">点击调色盘</span>
-        </div>
-        <div className="space-y-2">
-          <label className="flex items-center justify-between rounded-[10px] border border-[#E8DCCF] bg-white/90 px-3 py-2 text-[13px] text-[#5C4B42]">
+      <div className="flex items-center gap-3">
+        <span className="w-[140px] shrink-0 text-[13px] font-medium text-[#5C4B42]">Background Color</span>
+        <div className="flex items-center gap-2">
+          <label className="flex items-center gap-1">
             <span
-              className="h-8 w-8 rounded-lg border border-white shadow-sm"
+              className="h-6 w-6 rounded border border-white shadow-sm"
               style={{ backgroundColor: form.colorPrimary }}
             />
             <input
@@ -120,12 +118,12 @@ export function IdentitySection({
               aria-label="Background Color Primary"
               value={form.colorPrimary}
               onChange={(event) => onChange({ colorPrimary: event.target.value })}
-              className="h-8 w-10 cursor-pointer rounded border-0 bg-transparent p-0"
+              className="h-6 w-8 cursor-pointer rounded border-0 bg-transparent p-0"
             />
           </label>
-          <label className="flex items-center justify-between rounded-[10px] border border-[#E8DCCF] bg-white/90 px-3 py-2 text-[13px] text-[#5C4B42]">
+          <label className="flex items-center gap-1">
             <span
-              className="h-8 w-8 rounded-lg border border-white shadow-sm"
+              className="h-6 w-6 rounded border border-white shadow-sm"
               style={{ backgroundColor: form.colorSecondary }}
             />
             <input
@@ -133,46 +131,40 @@ export function IdentitySection({
               aria-label="Background Color Secondary"
               value={form.colorSecondary}
               onChange={(event) => onChange({ colorSecondary: event.target.value })}
-              className="h-8 w-10 cursor-pointer rounded border-0 bg-transparent p-0"
+              className="h-6 w-8 cursor-pointer rounded border-0 bg-transparent p-0"
             />
           </label>
         </div>
       </div>
 
-      <div className="space-y-2">
-        <TextField label="Nickname" value={form.nickname} onChange={(value) => onChange({ nickname: value })} />
-        <TextField
-          label="Description"
-          value={form.roleDescription}
-          onChange={(value) => onChange({ roleDescription: value })}
-        />
-        <TextField
-          label="Team Strengths"
-          value={form.teamStrengths}
-          onChange={(value) => onChange({ teamStrengths: value })}
-        />
-        <TextField
-          label="Personality"
-          value={form.personality}
-          onChange={(value) => onChange({ personality: value })}
-        />
-        <TextField
-          label="Caution"
-          value={form.caution}
-          onChange={(value) => onChange({ caution: value })}
-          placeholder="(无)"
-        />
-      </div>
+      <TextField
+        label="Team Strengths"
+        value={form.teamStrengths}
+        onChange={(value) => onChange({ teamStrengths: value })}
+      />
+      <TextField
+        label="Personality"
+        value={form.personality}
+        onChange={(value) => onChange({ personality: value })}
+      />
+      <TextField
+        label="Caution"
+        value={form.caution}
+        onChange={(value) => onChange({ caution: value })}
+        placeholder="(无)"
+      />
 
-      <div className="space-y-2 sm:ml-[152px]">
-        <span className="text-[13px] font-semibold text-[#8A776B]">Strengths</span>
-        <TagEditor
-          tags={strengthTags}
-          onChange={(tags) => onChange({ strengths: joinTags(tags) })}
-          addLabel="+ 选择"
-          placeholder="输入标签，例如 security"
-          emptyLabel="(无)"
-        />
+      <div className="flex items-start gap-3">
+        <span className="w-[140px] shrink-0 pt-1 text-[13px] font-medium text-[#5C4B42]">Strengths</span>
+        <div className="min-w-0 flex-1">
+          <TagEditor
+            tags={strengthTags}
+            onChange={(tags) => onChange({ strengths: joinTags(tags) })}
+            addLabel="+ 选择"
+            placeholder="输入标签，例如 security"
+            emptyLabel="(无)"
+          />
+        </div>
         <input
           aria-label="Strengths"
           value={form.strengths}
@@ -181,9 +173,9 @@ export function IdentitySection({
         />
       </div>
 
-      <div className="rounded-[12px] border border-dashed border-[#DCC9B8] bg-[#F7F3F0] px-4 py-3 sm:ml-[152px]">
-        <p className="text-[14px] font-semibold text-[#8A776B]">▸ Voice Config (点击展开)</p>
-        <p className="mt-1 text-[11px] leading-5 text-[#B59A88]">需对接和启用语音功能后才支持配置</p>
+      <div className="rounded-[10px] border border-dashed border-[#DCC9B8] bg-[#F7F3F0] px-3 py-2">
+        <p className="text-[13px] font-semibold text-[#8A776B]">▸ Voice Config (点击展开)</p>
+        <p className="mt-0.5 text-[11px] leading-4 text-[#B59A88]">需对接和启用语音功能后才支持配置</p>
       </div>
     </SectionCard>
   );
@@ -278,16 +270,14 @@ export function RoutingSection({
 
   return (
     <SectionCard title="别名与 @ 路由">
-      <div className="sm:ml-[152px]">
-        <TagEditor
-          tags={aliases}
-          lockedTags={lockedTags}
-          onChange={(tags) => onChange({ mentionPatterns: joinTags(tags) })}
-          addLabel="+ 添加"
-          placeholder="@砚砚"
-          emptyLabel="(暂无别名)"
-        />
-      </div>
+      <TagEditor
+        tags={aliases}
+        lockedTags={lockedTags}
+        onChange={(tags) => onChange({ mentionPatterns: joinTags(tags) })}
+        addLabel="+ 添加"
+        placeholder="@砚砚"
+        emptyLabel="(暂无别名)"
+      />
       <textarea
         aria-label="Aliases"
         value={form.mentionPatterns}
