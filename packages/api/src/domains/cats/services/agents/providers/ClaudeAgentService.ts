@@ -224,13 +224,9 @@ export class ClaudeAgentService implements AgentService {
 
     try {
       if (!isClaudeCliAvailable()) {
-        yield {
-          type: 'error' as const,
-          catId: this.catId,
-          content:
-            'Claude CLI 未安装。请先运行 `npm install -g @anthropic-ai/claude-code` 安装 Claude CLI，再重试。',
-          timestamp: Date.now(),
-        };
+        const msg = 'Claude CLI 未安装。请先运行 `npm install -g @anthropic-ai/claude-code` 安装 Claude CLI，再重试。';
+        yield { type: 'error' as const, catId: this.catId, error: msg, metadata, timestamp: Date.now() };
+        yield { type: 'done' as const, catId: this.catId, metadata, timestamp: Date.now() };
         return;
       }
 
