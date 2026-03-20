@@ -18,7 +18,8 @@ interface QueuePanelProps {
  */
 export function QueuePanel({ threadId }: QueuePanelProps) {
   const owner = useOwnerConfig();
-  const queue = useChatStore((s) => s.queue) ?? [];
+  const rawQueue = useChatStore((s) => s.queue);
+  const queue = useMemo(() => rawQueue ?? [], [rawQueue]);
   const queuePaused = useChatStore((s) => s.queuePaused) ?? false;
   const queuePauseReason = useChatStore((s) => s.queuePauseReason);
   const messages = useChatStore((s) => s.messages);
