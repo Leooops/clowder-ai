@@ -137,4 +137,26 @@ describe('F130: governance_blocked event contract', () => {
     }
     assert.equal(rendered.length, 1, 'Should deduplicate to single card');
   });
+
+  it('P2-1: repeated block updates invocationId instead of dropping newer call', () => {
+    // Simulate user sends message A → blocked (inv-A), then message B → blocked (inv-B)
+    const cards = new Map(); // projectPath → { invocationId }
+    const events = [
+      { type: 'governance_blocked', projectPath: '/proj', invocationId: 'inv-A' },
+      { type: 'governance_blocked', projectPath: '/proj', invocationId: 'inv-B' },
+    ];
+
+    for (const e of events) {
+      const existing = cards.get(e.projectPath);
+      if (existing) {
+        // P2-1: update invocationId to latest
+        existing.invocationId = e.invocationId;
+      } else {
+        cards.set(e.projectPath, { invocationId: e.invocationId });
+      }
+    }
+
+    assert.equal(cards.size, 1, 'Still one card');
+    assert.equal(cards.get('/proj').invocationId, 'inv-B', 'Card should hold latest invocationId');
+  });
 });

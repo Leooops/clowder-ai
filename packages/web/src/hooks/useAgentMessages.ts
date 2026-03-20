@@ -666,11 +666,27 @@ export function useAgentMessages() {
             // Use invocationId from backend payload — not guessing from store
             const invId = typeof parsed.invocationId === 'string' ? parsed.invocationId : undefined;
             // Deduplicate: multi-cat dispatch to same unbootstrapped project yields
-            // one governance_blocked per cat. Only show the first card.
-            const existingBlocked = useChatStore.getState().messages.find(
-              (m) => m.variant === 'governance_blocked' && m.extra?.governanceBlocked?.projectPath === projectPath,
-            );
-            if (!existingBlocked) {
+            // one governance_blocked per cat. Show first card; update invocationId
+            // on subsequent events so retry targets the latest blocked invocation.
+            const existingBlocked = useChatStore
+              .getState()
+              .messages.find(
+                (m) => m.variant === 'governance_blocked' && m.extra?.governanceBlocked?.projectPath === projectPath,
+              );
+            if (existingBlocked) {
+              // P2-1 fix: keep card but update invocationId to latest blocked call
+              if (invId) {
+                patchMessage(existingBlocked.id, {
+                  extra: {
+                    ...existingBlocked.extra,
+                    governanceBlocked: {
+                      ...existingBlocked.extra!.governanceBlocked!,
+                      invocationId: invId,
+                    },
+                  },
+                });
+              }
+            } else {
               addMessage({
                 id: `gov-blocked-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
                 type: 'system',

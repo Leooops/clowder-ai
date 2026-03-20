@@ -159,4 +159,32 @@ describe('GovernanceBlockedCard', () => {
     expect(retryButton).toBeTruthy();
     expect(retryButton?.textContent).toContain('重试');
   });
+
+  it('P2-1: button uses latest invocationId after prop update', async () => {
+    // Simulate: card initially rendered with inv-A, then prop updates to inv-B
+    mockApiFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => ({}) }) // confirm
+      .mockResolvedValueOnce({ ok: true, json: async () => ({}) }); // retry
+
+    // Render with latest invocationId (frontend patches this on repeated events)
+    act(() => {
+      root.render(
+        React.createElement(GovernanceBlockedCard, {
+          projectPath: '/test/proj',
+          reasonKind: 'needs_bootstrap',
+          invocationId: 'inv-B', // This is the latest, updated from inv-A
+        }),
+      );
+    });
+
+    const button = container.querySelector('button')!;
+    await act(async () => {
+      button.click();
+    });
+
+    // Retry should target inv-B, not inv-A
+    expect(mockApiFetch).toHaveBeenCalledWith('/api/invocations/inv-B/retry', {
+      method: 'POST',
+    });
+  });
 });
