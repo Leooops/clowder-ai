@@ -256,7 +256,6 @@ describe('HubCatEditor', () => {
     expect(container.textContent).toContain('Provider');
     expect(container.textContent).not.toContain('CLI Command');
 
-    await changeField(queryField(container, 'input[aria-label="Cat ID"]'), 'runtime-spark');
     await changeField(queryField(container, 'input[aria-label="Name"]'), '火花猫');
     await changeField(queryField(container, 'input[aria-label="Avatar"]'), '/avatars/spark.png');
     await changeField(queryField(container, 'input[aria-label="Description"]'), '快速执行');
@@ -277,7 +276,7 @@ describe('HubCatEditor', () => {
     expect(postCall?.[1]?.method).toBe('POST');
     const payload = JSON.parse(String(postCall?.[1]?.body));
     expect(payload.client).toBe('openai');
-    expect(payload.catId).toBe('runtime-spark');
+    expect(payload.catId).toBe('火花猫');
     expect(payload.accountRef).toBe('codex-sponsor');
     expect(payload.defaultModel).toBe('gpt-5.4-mini');
     expect(onSaved).toHaveBeenCalledTimes(1);
@@ -1141,7 +1140,6 @@ describe('HubCatEditor', () => {
 
     expect(container.textContent).toContain('4 项要么全部留空，要么全部填写');
 
-    await changeField(queryField(container, 'input[aria-label="Cat ID"]'), 'runtime-spark');
     await changeField(queryField(container, 'input[aria-label="Name"]'), '火花猫');
     await changeField(queryField(container, 'input[aria-label="Avatar"]'), '/avatars/spark.png');
     await changeField(queryField(container, 'input[aria-label="Description"]'), '快速执行');
@@ -1635,7 +1633,6 @@ describe('HubCatEditor', () => {
     });
     await flushEffects();
 
-    await changeField(queryField(container, 'input[aria-label="Cat ID"]'), 'runtime-reviewer');
     await changeField(queryField(container, 'input[aria-label="Name"]'), '运行时审查猫');
     await changeField(queryField(container, 'input[aria-label="Description"]'), 'review');
     await changeField(queryField(container, 'textarea[aria-label="Aliases"]'), '@runtime-reviewer, @第二别名');
@@ -1672,7 +1669,7 @@ describe('HubCatEditor', () => {
     const postCall = mockApiFetch.mock.calls.find(([path]) => path === '/api/cats');
     expect(postCall).toBeTruthy();
     const payload = JSON.parse(String(postCall?.[1]?.body));
-    expect(payload.mentionPatterns).toEqual(['@runtime-reviewer']);
+    expect(payload.mentionPatterns).toEqual(['@运行时审查猫', '@runtime-reviewer']);
     const codexConfigPatches = mockApiFetch.mock.calls.filter(
       ([path, init]) => path === '/api/config' && init?.method === 'PATCH',
     );

@@ -56,23 +56,19 @@ export function IdentitySection({
   return (
     <SectionCard title="身份信息">
       {!cat ? (
-        <div className="space-y-2">
+        <>
           <TextField
             label="名称"
             ariaLabel="Name"
             value={form.name}
             onChange={(value) => {
-              const patch: FormPatch = { name: value, displayName: value };
-              if (!form.catId || form.catId === autoSlug(form.name)) {
-                patch.catId = autoSlug(value);
-              }
-              onChange(patch);
+              onChange({ name: value, displayName: value, catId: autoSlug(value) });
             }}
             required
             placeholder="成员显示名称，如 我的助手"
           />
-          <TextField label="Cat ID" value={form.catId} onChange={(value) => onChange({ catId: value })} required placeholder="自动生成，可手动修改" />
-        </div>
+          <input type="hidden" aria-label="Cat ID" value={form.catId} />
+        </>
       ) : (
         <TextField label="名称" ariaLabel="Name" value={form.name} onChange={(value) => onChange({ name: value, displayName: value })} />
       )}
