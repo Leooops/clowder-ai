@@ -478,10 +478,12 @@ try {
       process.exit(1);
     }
     const displayName = getOptional(values, 'display-name', `Installer ${client} API Key`);
+    const modelArg = getOptional(values, 'model', '');
     upsertInstallerApiKeyAccount(projectDir, client, {
       displayName,
       apiKey,
       baseUrl: getOptional(values, 'base-url', ''),
+      ...(modelArg ? { models: [modelArg] } : {}),
     });
     process.exit(0);
   }

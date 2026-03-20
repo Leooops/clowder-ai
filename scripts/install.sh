@@ -70,8 +70,22 @@ tty_read_secret() {
     local prompt="$1" var="$2"
     if [[ "$HAS_TTY" == true ]]; then
         printf '%s' "$prompt" >/dev/tty 2>/dev/null || true
-        read -rs -t 120 "$var" </dev/tty 2>/dev/null || printf -v "$var" '%s' ''
+        local input="" char
+        while IFS= read -rs -n1 -t 120 char </dev/tty 2>/dev/null; do
+            [[ -z "$char" ]] && break  # Enter pressed
+            if [[ "$char" == $'\x7f' || "$char" == $'\b' ]]; then
+                # Backspace
+                if [[ -n "$input" ]]; then
+                    input="${input%?}"
+                    printf '\b \b' >/dev/tty 2>/dev/null || true
+                fi
+            else
+                input+="$char"
+                printf '*' >/dev/tty 2>/dev/null || true
+            fi
+        done
         printf '\n' >/dev/tty 2>/dev/null || true
+        printf -v "$var" '%s' "$input"
     else
         printf -v "$var" '%s' ''
     fi
@@ -714,35 +728,30 @@ configure_agent_auth() {
     fi
     local key="" base_url="" model=""
     tty_read_secret "    API Key: " key
-    case "$cmd" in
-        claude)
-            tty_read "    Base URL (Enter = https://api.anthropic.com): " base_url
-            tty_read "    Model (Enter = default): " model
-            if [[ -n "$key" ]]; then
-                write_claude_profile "$key" "$base_url" "$model"
-                ok "$name: API key profile created in .cat-cafe/"
-            else
-                remove_claude_installer_profile
-                warn "$name: no key provided, removed stale installer profile if any"
-            fi
-            ;;
-        codex)
-            tty_read "    Base URL (Enter = default): " base_url
-            tty_read "    Model (Enter = default): " model
-            if [[ -n "$key" ]]; then
-                set_codex_api_key_mode "$key" "$base_url" "$model"
-                ok "$name: API key collected (will write to .env)"
-            else warn "$name: no key provided, keeping OAuth"; set_codex_oauth_mode; fi
-            ;;
-        gemini)
-            tty_read "    Base URL (Enter = default): " base_url
-            tty_read "    Model (Enter = default): " model
-            if [[ -n "$key" ]]; then
-                set_gemini_api_key_mode "$key" "$base_url" "$model"
-                ok "$name: API key collected (will write to .env)"
-            else warn "$name: no key provided, keeping OAuth"; set_gemini_oauth_mode; fi
-            ;;
-    esac
+    tty_read "    Base URL (Enter = default): " base_url
+    tty_read "    Model (Enter = default): " model
+
+    if [[ -n "$key" ]]; then
+        # All clients use the same install-auth-config.mjs to create provider profiles
+        local install_args=(
+            node scripts/install-auth-config.mjs client-auth set
+            --project-dir "$PROJECT_DIR"
+            --client "$cmd"
+            --mode api_key
+            --base-url "${base_url:-}"
+        )
+        [[ -n "$model" ]] && install_args+=(--model "$model")
+        _INSTALLER_API_KEY="$key" "${install_args[@]}"
+        ok "$name: API key profile created in .cat-cafe/"
+    else
+        # No key provided — set OAuth mode
+        case "$cmd" in
+            claude) remove_claude_installer_profile ;;
+            codex) set_codex_oauth_mode ;;
+            gemini) set_gemini_oauth_mode ;;
+        esac
+        warn "$name: no key provided, keeping OAuth"
+    fi
 }
 
 if [[ "$HAS_TTY" == true ]]; then
