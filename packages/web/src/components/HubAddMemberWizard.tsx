@@ -16,7 +16,7 @@ import {
   filterAccounts,
   type ClientValue,
   type HubCatEditorDraft,
-  validateModelFormatForClient,
+
 } from './hub-cat-editor.model';
 import type { ProfileItem, ProviderProfilesResponse } from './hub-provider-profiles.types';
 
@@ -171,11 +171,6 @@ export function HubAddMemberWizard({ open, onClose, onComplete }: HubAddMemberWi
 
   const handleComplete = () => {
     if (!client || !defaultModel.trim()) return;
-    const modelFormatError = validateModelFormatForClient(client, defaultModel);
-    if (modelFormatError) {
-      setError(modelFormatError);
-      return;
-    }
     if (client === 'antigravity') {
       onComplete({
         client,

@@ -528,7 +528,7 @@ describe('cats routes runtime CRUD', { concurrency: false }, () => {
     assert.equal(createRes.statusCode, 201, 'cross-protocol api_key binding should be allowed');
   });
 
-  it('POST /api/cats requires providerId/modelId format for opencode client', async () => {
+  it('POST /api/cats accepts opencode model without providerId/ prefix (soft validation)', async () => {
     const projectRoot = createProjectRoot();
     process.env.CAT_TEMPLATE_PATH = join(projectRoot, 'cat-template.json');
 
@@ -556,12 +556,12 @@ describe('cats routes runtime CRUD', { concurrency: false }, () => {
         'x-cat-cafe-user': 'codex',
       },
       body: JSON.stringify({
-        catId: 'runtime-opencode-invalid-model-format',
+        catId: 'runtime-opencode-bare-model',
         name: '运行时金渐层',
         displayName: '运行时金渐层',
         avatar: '/avatars/opencode.png',
         color: { primary: '#0f172a', secondary: '#e2e8f0' },
-        mentionPatterns: ['@runtime-opencode-invalid-model-format'],
+        mentionPatterns: ['@runtime-opencode-bare-model'],
         roleDescription: '审查',
         client: 'opencode',
         providerProfileId: openaiProfile.id,
@@ -569,9 +569,8 @@ describe('cats routes runtime CRUD', { concurrency: false }, () => {
       }),
     });
 
-    assert.equal(createRes.statusCode, 400);
-    const createBody = JSON.parse(createRes.body);
-    assert.match(createBody.error, /providerId\/modelId/i);
+    // Model format is soft-validated in the UI only; server accepts bare model names.
+    assert.equal(createRes.statusCode, 201);
   });
 
   it('POST /api/cats rejects builtin bindings from the wrong client family even when protocol matches', async () => {

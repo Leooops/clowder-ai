@@ -219,6 +219,8 @@ export function filterAccounts(client: ClientValue, profiles: ProfileItem[]): Pr
   const builtinProfiles = profiles.filter(
     (profile) => profile.authType !== 'api_key' && legacyProfileClient(profile) === client,
   );
+  // Gemini CLI only supports builtin Google auth — no API key profiles.
+  if (client === 'google') return builtinProfiles;
   const apiKeyProfiles = profiles.filter((profile) => profile.authType === 'api_key');
   return [...builtinProfiles, ...apiKeyProfiles.filter((profile) => !builtinProfiles.includes(profile))];
 }

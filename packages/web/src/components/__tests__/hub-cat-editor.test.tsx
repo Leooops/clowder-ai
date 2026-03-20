@@ -289,7 +289,8 @@ describe('HubCatEditor', () => {
     expect(onSaved).toHaveBeenCalledTimes(1);
   });
 
-  it('blocks creating opencode member when model is not providerId/modelId', async () => {
+  it('allows creating opencode member with bare model (soft validation, no block)', async () => {
+    const onSaved = vi.fn(() => Promise.resolve());
     mockApiFetch.mockImplementation((path: string, init?: RequestInit) => {
       if (path === '/api/provider-profiles') {
         return Promise.resolve(
@@ -331,7 +332,7 @@ describe('HubCatEditor', () => {
             defaultModel: 'gpt-5.4',
           },
           onClose: vi.fn(),
-          onSaved: vi.fn(),
+          onSaved: onSaved,
         }),
       );
     });
@@ -346,10 +347,11 @@ describe('HubCatEditor', () => {
     });
     await flushEffects();
 
-    expect(container.textContent).toContain('providerId/modelId');
-    expect(
-      mockApiFetch.mock.calls.find(([path, init]) => path === '/api/cats' && init?.method === 'POST'),
-    ).toBeFalsy();
+    // Save should proceed even with bare model name — validation is soft hint only.
+    const postCall = mockApiFetch.mock.calls.find(
+      ([path, init]: [string, RequestInit | undefined]) => path === '/api/cats' && init?.method === 'POST',
+    );
+    expect(postCall).toBeTruthy();
   });
 
   it('resets defaultModel when switching Provider to prevent stale model carry-over', async () => {

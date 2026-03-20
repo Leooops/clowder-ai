@@ -19,7 +19,7 @@ import {
   type StrategyFormState,
   toCodexRuntimeSettings,
   toStrategyForm,
-  validateModelFormatForClient,
+
 } from './hub-cat-editor.model';
 import { AccountSection, IdentitySection, RoutingSection } from './hub-cat-editor.sections';
 import { AdvancedRuntimeSection } from './hub-cat-editor-advanced';
@@ -245,17 +245,6 @@ export function HubCatEditor({ cat, draft, open, onClose, onSaved }: HubCatEdito
       }
     };
     try {
-      const shouldValidateOpencodeModel =
-        form.client === 'opencode' &&
-        (!cat || cat.provider !== 'opencode' || form.defaultModel.trim() !== (cat.defaultModel ?? '').trim());
-      if (shouldValidateOpencodeModel) {
-        const modelFormatError = validateModelFormatForClient(form.client, form.defaultModel);
-        if (modelFormatError) {
-          setError(modelFormatError);
-          return;
-        }
-      }
-
       const catPayload = buildCatPayload(form, cat);
       const rollbackCatPayload = cat ? buildCatPayload(initialState(cat, null), cat) : null;
       const nextStrategyPayload = cat && strategyForm ? buildStrategyPayload(strategyForm) : null;

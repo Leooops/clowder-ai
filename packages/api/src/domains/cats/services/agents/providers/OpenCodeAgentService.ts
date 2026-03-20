@@ -3,7 +3,7 @@
  * 通过 opencode CLI 子进程调用 opencode agent（headless JSON 模式）
  *
  * CLI 调用方式:
- *   opencode run "prompt" --format json -m anthropic/MODEL
+ *   opencode run "prompt" --format json -m providerId/MODEL
  *   (API key passed via child process env, not CLI args)
  *
  * NDJSON 事件格式 (opencode run --format json):
