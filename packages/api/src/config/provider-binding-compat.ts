@@ -33,6 +33,15 @@ function resolveExpectedProtocolForProvider(provider: CatProvider): ProviderProf
   }
 }
 
+export function validateModelFormatForProvider(provider: CatProvider, defaultModel?: string | null): string | null {
+  if (provider !== 'opencode') return null;
+  const trimmedModel = defaultModel?.trim();
+  if (!trimmedModel) return null;
+  const slashIndex = trimmedModel.indexOf('/');
+  if (slashIndex > 0 && slashIndex < trimmedModel.length - 1) return null;
+  return 'client "opencode" requires model format "providerId/modelId" (e.g. openai/gpt-5.4)';
+}
+
 export function validateRuntimeProviderBinding(
   provider: CatProvider,
   profile: RuntimeProviderProfile,

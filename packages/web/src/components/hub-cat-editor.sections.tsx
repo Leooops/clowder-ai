@@ -302,9 +302,20 @@ export function AccountSection({
                 value={form.defaultModel}
                 onChange={(value) => onChange({ defaultModel: value })}
                 required
-                placeholder="模型标识符，如 claude-sonnet-4-5"
+                placeholder={
+                  form.client === 'opencode'
+                    ? '例如 openai/gpt-5.4 或 openrouter/google/gemini-3-flash-preview'
+                    : '模型标识符，如 claude-sonnet-4-5'
+                }
               />
             )}
+            {form.client === 'opencode' ? (
+              <div className="rounded-[10px] border border-dashed border-[#DCC9B8] bg-[#F7F3F0] px-3 py-2">
+                <p className="text-[11px] leading-4 text-[#8A776B]">
+                  OpenCode 的 Model 必须使用 `providerId/modelId` 格式（例如 `openai/gpt-5.4`）。
+                </p>
+              </div>
+            ) : null}
           </>
         )}
       </div>

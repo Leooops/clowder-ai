@@ -358,6 +358,14 @@ function trimText(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+export function validateModelFormatForClient(client: ClientValue, model: string): string | null {
+  if (client !== 'opencode') return null;
+  const trimmed = model.trim();
+  const slashIndex = trimmed.indexOf('/');
+  if (slashIndex > 0 && slashIndex < trimmed.length - 1) return null;
+  return 'OpenCode 的 Model 必须使用 providerId/modelId 格式（例如 openai/gpt-5.4）';
+}
+
 function resolveFormAccountRef(form: HubCatEditorFormState): string {
   return trimText(form.accountRef ?? (form as HubCatEditorFormState & { providerProfileId?: string }).providerProfileId);
 }

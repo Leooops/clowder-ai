@@ -226,6 +226,31 @@ describe('HubAddMemberWizard', () => {
     expect(queryField<HTMLSelectElement>(container, 'select[aria-label="Model"]').value).toBe('gpt-5.4-mini');
   });
 
+  it('requires providerId/modelId when creating opencode member', async () => {
+    const onComplete = vi.fn();
+
+    await act(async () => {
+      root.render(
+        React.createElement(HubAddMemberWizard, {
+          open: true,
+          onClose: vi.fn(),
+          onComplete,
+        }),
+      );
+    });
+    await flushEffects();
+
+    await click(queryButton(container, 'OpenCode'));
+    await click(queryButton(container, 'Codex Sponsor'));
+
+    expect(container.textContent).toContain('providerId/modelId');
+    await click(queryButton(container, '创建后继续编辑'));
+    await flushEffects();
+
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('providerId/modelId');
+  });
+
   it('walks the Antigravity flow with default CLI args and lands in the editor', async () => {
     await act(async () => {
       root.render(React.createElement(WizardHost));

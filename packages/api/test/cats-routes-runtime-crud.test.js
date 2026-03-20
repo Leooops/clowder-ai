@@ -495,7 +495,7 @@ describe('cats routes runtime CRUD', { concurrency: false }, () => {
       protocol: 'openai',
       baseUrl: 'https://api.bound.example',
       apiKey: 'sk-bound-openai',
-      models: ['claude-sonnet-4-6'],
+      models: ['openai/claude-sonnet-4-6'],
     });
 
     const Fastify = (await import('fastify')).default;
@@ -521,11 +521,57 @@ describe('cats routes runtime CRUD', { concurrency: false }, () => {
         roleDescription: '审查',
         client: 'opencode',
         providerProfileId: crossProtocolProfile.id,
-        defaultModel: 'claude-sonnet-4-6',
+        defaultModel: 'openai/claude-sonnet-4-6',
       }),
     });
 
     assert.equal(createRes.statusCode, 201, 'cross-protocol api_key binding should be allowed');
+  });
+
+  it('POST /api/cats requires providerId/modelId format for opencode client', async () => {
+    const projectRoot = createProjectRoot();
+    process.env.CAT_TEMPLATE_PATH = join(projectRoot, 'cat-template.json');
+
+    const { createProviderProfile } = await import('../dist/config/provider-profiles.js');
+    const openaiProfile = await createProviderProfile(projectRoot, {
+      displayName: 'OpenAI Key Profile',
+      authType: 'api_key',
+      protocol: 'openai',
+      baseUrl: 'https://api.bound.example',
+      apiKey: 'sk-bound-openai',
+      models: ['gpt-5.4'],
+    });
+
+    const Fastify = (await import('fastify')).default;
+    const { catsRoutes } = await import('../dist/routes/cats.js');
+
+    const app = Fastify();
+    await app.register(catsRoutes);
+
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/api/cats',
+      headers: {
+        'content-type': 'application/json',
+        'x-cat-cafe-user': 'codex',
+      },
+      body: JSON.stringify({
+        catId: 'runtime-opencode-invalid-model-format',
+        name: '运行时金渐层',
+        displayName: '运行时金渐层',
+        avatar: '/avatars/opencode.png',
+        color: { primary: '#0f172a', secondary: '#e2e8f0' },
+        mentionPatterns: ['@runtime-opencode-invalid-model-format'],
+        roleDescription: '审查',
+        client: 'opencode',
+        providerProfileId: openaiProfile.id,
+        defaultModel: 'gpt-5.4',
+      }),
+    });
+
+    assert.equal(createRes.statusCode, 400);
+    const createBody = JSON.parse(createRes.body);
+    assert.match(createBody.error, /providerId\/modelId/i);
   });
 
   it('POST /api/cats rejects builtin bindings from the wrong client family even when protocol matches', async () => {

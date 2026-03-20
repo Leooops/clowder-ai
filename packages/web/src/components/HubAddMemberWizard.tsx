@@ -11,7 +11,13 @@ import {
   FALLBACK_ANTIGRAVITY_ARGS,
   PillChoiceButton,
 } from './hub-add-member-wizard.parts';
-import { builtinAccountIdForClient, filterAccounts, type ClientValue, type HubCatEditorDraft } from './hub-cat-editor.model';
+import {
+  builtinAccountIdForClient,
+  filterAccounts,
+  type ClientValue,
+  type HubCatEditorDraft,
+  validateModelFormatForClient,
+} from './hub-cat-editor.model';
 import type { ProfileItem, ProviderProfilesResponse } from './hub-provider-profiles.types';
 
 interface HubAddMemberWizardProps {
@@ -165,6 +171,11 @@ export function HubAddMemberWizard({ open, onClose, onComplete }: HubAddMemberWi
 
   const handleComplete = () => {
     if (!client || !defaultModel.trim()) return;
+    const modelFormatError = validateModelFormatForClient(client, defaultModel);
+    if (modelFormatError) {
+      setError(modelFormatError);
+      return;
+    }
     if (client === 'antigravity') {
       onComplete({
         client,
@@ -292,6 +303,11 @@ export function HubAddMemberWizard({ open, onClose, onComplete }: HubAddMemberWi
                 />
               </label>
             )}
+            {client === 'opencode' ? (
+              <p className="rounded-2xl border border-dashed border-[#E8DCCF] bg-white/80 px-4 py-2 text-xs leading-5 text-[#8A776B]">
+                OpenCode 的 Model 必须使用 `providerId/modelId` 格式（例如 `openai/gpt-5.4`）。
+              </p>
+            ) : null}
           </section>
 
           {error ? <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p> : null}

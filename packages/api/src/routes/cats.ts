@@ -12,7 +12,11 @@ import { isSeedCat, resolveBoundAccountRefForCat } from '../config/cat-account-b
 import { bootstrapCatCatalog, resolveCatCatalogPath } from '../config/cat-catalog-store.js';
 import { getRoster, loadCatConfig, toAllCatConfigs } from '../config/cat-config-loader.js';
 import { resolveProjectTemplatePath } from '../config/project-template-path.js';
-import { resolveBuiltinClientForProvider, validateRuntimeProviderBinding } from '../config/provider-binding-compat.js';
+import {
+  resolveBuiltinClientForProvider,
+  validateModelFormatForProvider,
+  validateRuntimeProviderBinding,
+} from '../config/provider-binding-compat.js';
 import { resolveRuntimeProviderProfileById, resolveRuntimeProviderProfileForClient } from '../config/provider-profiles.js';
 import { createRuntimeCat, deleteRuntimeCat, updateRuntimeCat } from '../config/runtime-cat-catalog.js';
 import { deleteRuntimeOverride, getRuntimeOverride, setRuntimeOverride } from '../config/session-strategy-overrides.js';
@@ -355,6 +359,10 @@ export const catsRoutes: FastifyPluginAsync<CatsRoutesOptions> = async (app, opt
     const accountRef = resolveAccountRef(body);
     try {
       await validateAccountBindingOrThrow(projectRoot, body.client, accountRef, body.defaultModel);
+      const modelFormatError = validateModelFormatForProvider(body.client, body.defaultModel);
+      if (modelFormatError) {
+        throw new Error(modelFormatError);
+      }
       const resolvedAvatar = body.avatar ?? '/avatars/default.png';
       if (body.client === 'antigravity') {
         createRuntimeCat(projectRoot, {
@@ -472,6 +480,15 @@ export const catsRoutes: FastifyPluginAsync<CatsRoutesOptions> = async (app, opt
     if (providerConfigTouched) {
       try {
         await validateAccountBindingOrThrow(projectRoot, effectiveClient, effectiveAccountRef, effectiveDefaultModel);
+        const shouldValidateModelFormat =
+          effectiveClient === 'opencode' &&
+          (body.client === 'opencode' || (body.defaultModel !== undefined && body.defaultModel !== currentCat.defaultModel));
+        if (shouldValidateModelFormat) {
+          const modelFormatError = validateModelFormatForProvider(effectiveClient, effectiveDefaultModel);
+          if (modelFormatError) {
+            throw new Error(modelFormatError);
+          }
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         reply.status(400);

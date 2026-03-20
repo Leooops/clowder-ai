@@ -15,6 +15,7 @@ import {
   filterProfiles,
   type HubCatEditorFormState,
   splitCommandArgs,
+  validateModelFormatForClient,
 } from '@/components/hub-cat-editor.model';
 
 const mockApiFetch = vi.mocked(apiFetch);
@@ -201,6 +202,12 @@ describe('HubCatEditor', () => {
     ]);
   });
 
+  it('validateModelFormatForClient enforces providerId/modelId for opencode only', () => {
+    expect(validateModelFormatForClient('opencode', 'gpt-5.4')).toMatch(/providerId\/modelId/i);
+    expect(validateModelFormatForClient('opencode', 'openai/gpt-5.4')).toBeNull();
+    expect(validateModelFormatForClient('openai', 'gpt-5.4')).toBeNull();
+  });
+
   it('renders normal member provider/model fields and saves to /api/cats', async () => {
     const onSaved = vi.fn(() => Promise.resolve());
     mockApiFetch.mockImplementation((path: string) => {
@@ -280,6 +287,69 @@ describe('HubCatEditor', () => {
     expect(payload.accountRef).toBe('codex-sponsor');
     expect(payload.defaultModel).toBe('gpt-5.4-mini');
     expect(onSaved).toHaveBeenCalledTimes(1);
+  });
+
+  it('blocks creating opencode member when model is not providerId/modelId', async () => {
+    mockApiFetch.mockImplementation((path: string, init?: RequestInit) => {
+      if (path === '/api/provider-profiles') {
+        return Promise.resolve(
+          jsonResponse({
+            projectPath: '/tmp/project',
+            activeProfileId: 'opencode',
+            providers: [
+              {
+                id: 'opencode',
+                provider: 'opencode',
+                displayName: 'OpenCode (OAuth)',
+                name: 'OpenCode (OAuth)',
+                authType: 'oauth',
+                protocol: 'anthropic',
+                builtin: true,
+                mode: 'subscription',
+                models: ['claude-opus-4-6'],
+                hasApiKey: false,
+                createdAt: '2026-03-18T00:00:00.000Z',
+                updatedAt: '2026-03-18T00:00:00.000Z',
+              },
+            ],
+          }),
+        );
+      }
+      if (path === '/api/cats' && init?.method === 'POST') {
+        return Promise.resolve(jsonResponse({ cat: { id: 'runtime-opencode' } }, 201));
+      }
+      throw new Error(`Unexpected apiFetch path: ${path}`);
+    });
+
+    await act(async () => {
+      root.render(
+        React.createElement(HubCatEditor, {
+          open: true,
+          draft: {
+            client: 'opencode',
+            accountRef: 'opencode',
+            defaultModel: 'gpt-5.4',
+          },
+          onClose: vi.fn(),
+          onSaved: vi.fn(),
+        }),
+      );
+    });
+    await flushEffects();
+
+    await changeField(queryField(container, 'input[aria-label="Name"]'), '运行时金渐层');
+    await changeField(queryField(container, 'input[aria-label="Description"]'), '审查');
+
+    const saveButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === '保存');
+    await act(async () => {
+      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushEffects();
+
+    expect(container.textContent).toContain('providerId/modelId');
+    expect(
+      mockApiFetch.mock.calls.find(([path, init]) => path === '/api/cats' && init?.method === 'POST'),
+    ).toBeFalsy();
   });
 
   it('resets defaultModel when switching Provider to prevent stale model carry-over', async () => {
