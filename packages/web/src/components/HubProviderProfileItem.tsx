@@ -2,7 +2,6 @@
 
 import { useCallback, useState } from 'react';
 import { TagEditor } from './hub-tag-editor';
-import { builtinClientLabel } from './hub-provider-profiles.view';
 import type { ProfileItem } from './hub-provider-profiles.types';
 
 export interface ProfileEditPayload {
