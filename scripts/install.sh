@@ -720,9 +720,14 @@ configure_agent_auth() {
         "OAuth / Subscription (recommended / 推荐)" \
         "API Key"
     if [[ "$auth_sel" != "1" ]]; then
-        [[ "$cmd" == "claude" ]] && remove_claude_installer_profile
-        [[ "$cmd" == "codex" ]] && set_codex_oauth_mode
-        [[ "$cmd" == "gemini" ]] && set_gemini_oauth_mode
+        # Remove stale installer API Key profile + set OAuth binding
+        node scripts/install-auth-config.mjs client-auth remove \
+            --project-dir "$PROJECT_DIR" \
+            --client "$cmd" 2>/dev/null || true
+        node scripts/install-auth-config.mjs client-auth set \
+            --project-dir "$PROJECT_DIR" \
+            --client "$cmd" \
+            --mode oauth
         ok "$name: OAuth mode (login on first use: run '$cmd')"
         return 0
     fi
