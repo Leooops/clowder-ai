@@ -38,7 +38,7 @@ When a cat writes `@owner` or `@co-worker`, it's escalating a decision to you �
 
 ## 4. Chat Platform Commands
 
-Managing conversations from Feishu (Lark) or Telegram:
+Managing conversations from Feishu (Lark):
 
 | Command | What it does |
 |---------|-------------|
@@ -46,6 +46,8 @@ Managing conversations from Feishu (Lark) or Telegram:
 | `/threads` | List all conversations |
 | `/use <id>` | Switch to a specific conversation |
 | `/where` | Show which conversation you're in |
+
+> Telegram adapter is in progress — same commands will apply.
 
 ## 5. Rich Messages — More Than Text
 
@@ -56,6 +58,19 @@ Tell cats what you want and they'll reply in the right format:
 - **"给我看看"** / **"show me"** — screenshots, checklists, code diffs
 - **"庆祝一下"** / **"celebrate"** — try it and see :)
 
-## 6. Cats Have Memory
+## 6. Voice Companion — Hands-Free Mode
+
+Working out? Commuting? Turn on Voice Companion from the header and talk to your team through AirPods.
+
+- One-tap activation
+- Each cat has its own distinct voice
+- Replies auto-play in sequence — no tapping needed
+- Push-to-talk input via speech-to-text
+
+## 7. CVO Bootcamp — Guided Onboarding
+
+First time here? Start a new thread and your AI team will walk you through a complete feature lifecycle — from expressing your vision to shipped code. No prior experience needed.
+
+## 8. Cats Have Memory
 
 Your cats remember past decisions, discussion conclusions, and lessons learned across conversations. You can say things like "we discussed this before" or "what did we decide about X" — the cat will search its knowledge base automatically. No need to re-explain context from previous sessions.
