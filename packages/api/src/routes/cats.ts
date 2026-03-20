@@ -4,21 +4,19 @@
  * GET /api/cats/:id/status - 获取猫猫状态
  */
 
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import { type CatConfig, type CatProvider, type ContextBudget, catRegistry, type RosterEntry } from '@cat-cafe/shared';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { isSeedCat, resolveBoundAccountRefForCat } from '../config/cat-account-binding.js';
 import { bootstrapCatCatalog, resolveCatCatalogPath } from '../config/cat-catalog-store.js';
 import { getRoster, loadCatConfig, toAllCatConfigs } from '../config/cat-config-loader.js';
+import { resolveProjectTemplatePath } from '../config/project-template-path.js';
 import { resolveBuiltinClientForProvider, validateRuntimeProviderBinding } from '../config/provider-binding-compat.js';
 import { resolveRuntimeProviderProfileById, resolveRuntimeProviderProfileForClient } from '../config/provider-profiles.js';
 import { createRuntimeCat, deleteRuntimeCat, updateRuntimeCat } from '../config/runtime-cat-catalog.js';
 import { deleteRuntimeOverride, getRuntimeOverride, setRuntimeOverride } from '../config/session-strategy-overrides.js';
 import { resolveActiveProjectRoot } from '../utils/active-project-root.js';
-
-const DEFAULT_TEMPLATE_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../cat-template.json');
 
 const colorSchema = z.object({
   primary: z.string().min(1),
@@ -118,8 +116,8 @@ interface CatResponseMetadata {
   source: CatSource;
 }
 
-function buildCatResponseMetadataResolver() {
-  const templatePath = process.env.CAT_TEMPLATE_PATH ?? DEFAULT_TEMPLATE_PATH;
+function buildCatResponseMetadataResolver(projectRoot: string) {
+  const templatePath = resolveProjectTemplatePath(projectRoot);
   let seedCatIds = new Set<string>();
   try {
     seedCatIds = new Set(Object.keys(toAllCatConfigs(loadCatConfig(templatePath))));
@@ -129,9 +127,14 @@ function buildCatResponseMetadataResolver() {
 
   let roster: Record<string, RosterEntry> = {};
   try {
-    roster = getRoster(loadCatConfig());
+    bootstrapCatCatalog(projectRoot, templatePath);
+    roster = getRoster(loadCatConfig(resolveCatCatalogPath(projectRoot)));
   } catch {
-    roster = {};
+    try {
+      roster = getRoster(loadCatConfig(templatePath));
+    } catch {
+      roster = {};
+    }
   }
 
   return (catId: string): CatResponseMetadata => ({
@@ -287,7 +290,7 @@ function getManagedCatalogIds(projectRoot: string): Set<string> {
 
 function getResolvedCats(projectRoot: string) {
   try {
-    const templatePath = process.env.CAT_TEMPLATE_PATH ?? DEFAULT_TEMPLATE_PATH;
+    const templatePath = resolveProjectTemplatePath(projectRoot);
     bootstrapCatCatalog(projectRoot, templatePath);
     const resolved = toAllCatConfigs(loadCatConfig(resolveCatCatalogPath(projectRoot)));
     for (const [id, config] of Object.entries(catRegistry.getAllConfigs())) {
@@ -306,8 +309,8 @@ interface CatsRoutesOptions {
 export const catsRoutes: FastifyPluginAsync<CatsRoutesOptions> = async (app, opts) => {
   // GET /api/cats - 获取所有猫猫配置
   app.get('/api/cats', async () => {
-    const resolveMetadata = buildCatResponseMetadataResolver();
     const projectRoot = resolveProjectRoot();
+    const resolveMetadata = buildCatResponseMetadataResolver(projectRoot);
     const resolveEffectiveAccountRef = buildEffectiveAccountRefResolver(projectRoot);
     return {
       cats: await Promise.all(
@@ -399,7 +402,7 @@ export const catsRoutes: FastifyPluginAsync<CatsRoutesOptions> = async (app, opt
 
     const resolved = await reconcileCatRegistry(projectRoot, managedIdsBefore, opts.onCatalogChanged);
     const cat = resolved[body.catId];
-    const metadata = buildCatResponseMetadataResolver();
+    const metadata = buildCatResponseMetadataResolver(projectRoot);
     const resolveEffectiveAccountRef = buildEffectiveAccountRefResolver(projectRoot);
     reply.status(201);
     return { cat: await toCatResponse(cat, metadata(cat.id), resolveEffectiveAccountRef), updatedBy: operator };
@@ -488,7 +491,7 @@ export const catsRoutes: FastifyPluginAsync<CatsRoutesOptions> = async (app, opt
 
       const resolved = await reconcileCatRegistry(projectRoot, managedIdsBefore, opts.onCatalogChanged);
       const cat = resolved[request.params.id];
-      const metadata = buildCatResponseMetadataResolver();
+      const metadata = buildCatResponseMetadataResolver(projectRoot);
       return { cat: await toCatResponse(cat, metadata(cat.id), resolveEffectiveAccountRef), updatedBy: operator };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -514,7 +517,7 @@ export const catsRoutes: FastifyPluginAsync<CatsRoutesOptions> = async (app, opt
       reply.status(404);
       return { error: `Cat "${request.params.id}" not found` };
     }
-    const metadata = buildCatResponseMetadataResolver();
+    const metadata = buildCatResponseMetadataResolver(projectRoot);
     if (metadata(request.params.id).source === 'seed') {
       reply.status(409);
       return { error: 'cannot delete seed cat' };

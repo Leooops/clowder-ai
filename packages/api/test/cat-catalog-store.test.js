@@ -205,6 +205,23 @@ function makeF127BootstrapTemplate() {
   };
 }
 
+function makeSiblingTemplate(seedCatId) {
+  const config = validConfig();
+  config.breeds[0].catId = seedCatId;
+  config.breeds[0].displayName = '影子猫';
+  config.breeds[0].mentionPatterns = [`@${seedCatId}`];
+  config.roster = {
+    [seedCatId]: {
+      family: 'ragdoll',
+      roles: ['architect'],
+      lead: true,
+      available: true,
+      evaluation: 'shadow',
+    },
+  };
+  return config;
+}
+
 describe('cat-catalog-store', () => {
   it('bootstraps managed clients with bindings while preserving skipped seed members', () => {
     const projectRoot = mkdtempSync(join(tmpdir(), 'cat-catalog-store-f127-default-'));
@@ -612,6 +629,99 @@ describe('cat-catalog-store', () => {
     assert.equal(
       catalog.breeds.some((breed) => breed.catId === 'opus'),
       true,
+    );
+  });
+
+  it('ignores sibling CAT_TEMPLATE_PATH prefixes when bootstrapping a runtime catalog', async () => {
+    const parentRoot = mkdtempSync(join(tmpdir(), 'cat-catalog-store-boundary-'));
+    const projectRoot = join(parentRoot, 'clowder-ai');
+    const siblingRoot = join(parentRoot, 'clowder-ai-old');
+    mkdirSync(projectRoot, { recursive: true });
+    mkdirSync(siblingRoot, { recursive: true });
+
+    const templatePath = join(projectRoot, 'cat-template.json');
+    const siblingTemplatePath = join(siblingRoot, 'cat-template.json');
+    writeFileSync(templatePath, JSON.stringify(validConfig(), null, 2));
+    writeFileSync(siblingTemplatePath, JSON.stringify(makeSiblingTemplate('shadow-seed'), null, 2));
+
+    const previousTemplatePath = process.env.CAT_TEMPLATE_PATH;
+    process.env.CAT_TEMPLATE_PATH = siblingTemplatePath;
+    try {
+      await createRuntimeCat(projectRoot, {
+        catId: 'temp-cat',
+        breedId: 'temp-cat',
+        name: '临时猫',
+        displayName: '临时猫',
+        avatar: '/avatars/temp.png',
+        color: { primary: '#64748b', secondary: '#cbd5e1' },
+        mentionPatterns: ['@temp-cat'],
+        roleDescription: '临时成员',
+        personality: '临时',
+        provider: 'dare',
+        defaultModel: 'dare-1',
+        mcpSupport: false,
+        cli: { command: 'dare', outputFormat: 'json' },
+      });
+    } finally {
+      if (previousTemplatePath === undefined) delete process.env.CAT_TEMPLATE_PATH;
+      else process.env.CAT_TEMPLATE_PATH = previousTemplatePath;
+    }
+
+    const catalog = readRuntimeCatCatalog(projectRoot);
+    assert.equal(
+      catalog.breeds.some((breed) => breed.catId === 'opus'),
+      true,
+      'runtime bootstrap should use the in-project template',
+    );
+    assert.equal(
+      catalog.breeds.some((breed) => breed.catId === 'shadow-seed'),
+      false,
+      'sibling template must not seed this project',
+    );
+  });
+
+  it('does not treat sibling-template seeds as local seeds during delete checks', async () => {
+    const parentRoot = mkdtempSync(join(tmpdir(), 'cat-catalog-store-delete-boundary-'));
+    const projectRoot = join(parentRoot, 'clowder-ai');
+    const siblingRoot = join(parentRoot, 'clowder-ai-old');
+    mkdirSync(projectRoot, { recursive: true });
+    mkdirSync(siblingRoot, { recursive: true });
+
+    const templatePath = join(projectRoot, 'cat-template.json');
+    const siblingTemplatePath = join(siblingRoot, 'cat-template.json');
+    writeFileSync(templatePath, JSON.stringify(validConfig(), null, 2));
+    writeFileSync(siblingTemplatePath, JSON.stringify(makeSiblingTemplate('shadow-seed'), null, 2));
+    bootstrapCatCatalog(projectRoot, templatePath);
+
+    await createRuntimeCat(projectRoot, {
+      catId: 'shadow-seed',
+      breedId: 'shadow-seed',
+      name: '影子临时猫',
+      displayName: '影子临时猫',
+      avatar: '/avatars/shadow.png',
+      color: { primary: '#334155', secondary: '#cbd5f5' },
+      mentionPatterns: ['@shadow-seed'],
+      roleDescription: '用于路径边界验证',
+      provider: 'dare',
+      defaultModel: 'dare-1',
+      mcpSupport: false,
+      cli: { command: 'dare', outputFormat: 'json' },
+    });
+
+    const previousTemplatePath = process.env.CAT_TEMPLATE_PATH;
+    process.env.CAT_TEMPLATE_PATH = siblingTemplatePath;
+    try {
+      await deleteRuntimeCat(projectRoot, 'shadow-seed');
+    } finally {
+      if (previousTemplatePath === undefined) delete process.env.CAT_TEMPLATE_PATH;
+      else process.env.CAT_TEMPLATE_PATH = previousTemplatePath;
+    }
+
+    const catalog = readRuntimeCatCatalog(projectRoot);
+    assert.equal(
+      catalog.breeds.some((breed) => breed.catId === 'shadow-seed'),
+      false,
+      'runtime cat matching a sibling seed id should still be deletable',
     );
   });
 });

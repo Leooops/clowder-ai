@@ -3,6 +3,7 @@ import { dirname, relative, resolve, sep } from 'node:path';
 import type { CatCafeConfig, Roster } from '@cat-cafe/shared';
 import { builtinAccountIdForClient, readBootstrapBindingsSync } from './provider-profiles.js';
 import type { BootstrapBinding, BuiltinAccountClient } from './provider-profiles.types.js';
+import { resolveProjectTemplatePath } from './project-template-path.js';
 
 const CAT_CAFE_DIR = '.cat-cafe';
 const CAT_CATALOG_FILENAME = 'cat-catalog.json';
@@ -15,20 +16,6 @@ function safePath(projectRoot: string, ...segments: string[]): string {
     throw new Error(`Path escapes project root: ${normalized}`);
   }
   return normalized;
-}
-
-function isWithinProjectRoot(projectRoot: string, candidatePath: string): boolean {
-  const rel = relative(resolve(projectRoot), resolve(candidatePath));
-  return rel === '' || (!rel.startsWith(`..${sep}`) && rel !== '..');
-}
-
-function resolveTemplatePath(projectRoot: string): string {
-  const envPath = process.env.CAT_TEMPLATE_PATH?.trim();
-  if (envPath) {
-    const resolvedEnvPath = resolve(envPath);
-    if (isWithinProjectRoot(projectRoot, resolvedEnvPath)) return resolvedEnvPath;
-  }
-  return resolve(projectRoot, 'cat-template.json');
 }
 
 function providerToBootstrapClient(provider: unknown): BuiltinAccountClient | null {
@@ -126,7 +113,7 @@ function readSeedMetadata(projectRoot: string): {
   const seedCatIdsByClient = new Map<BuiltinAccountClient, Set<string>>();
 
   try {
-    const template = JSON.parse(readFileSync(resolveTemplatePath(projectRoot), 'utf-8')) as CatCafeConfig;
+    const template = JSON.parse(readFileSync(resolveProjectTemplatePath(projectRoot), 'utf-8')) as CatCafeConfig;
     for (const breed of template.breeds as unknown as Record<string, unknown>[]) {
       const variants = Array.isArray(breed.variants) ? (breed.variants as Record<string, unknown>[]) : [];
       for (const variant of variants) {

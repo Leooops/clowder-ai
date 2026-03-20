@@ -13,6 +13,14 @@ import { buildEnvSummary, ENV_CATEGORIES, ENV_VARS, maskUrlCredentials } from '.
 
 // Save and restore env vars around tests
 const savedEnv = {};
+const BOOTSTRAP_ONLY_NEXT_PUBLIC_VARS = [
+  'NEXT_PUBLIC_API_URL',
+  'NEXT_PUBLIC_WHISPER_URL',
+  'NEXT_PUBLIC_LLM_POSTPROCESS_URL',
+  'NEXT_PUBLIC_PROJECT_ROOT',
+  'NEXT_PUBLIC_DEBUG_SKIP_FILE_CHANGE_UI',
+];
+
 function setEnv(key, value) {
   savedEnv[key] = process.env[key];
   if (value === undefined) {
@@ -72,10 +80,12 @@ describe('env-registry', () => {
     assert.equal(previewPort.runtimeEditable, true);
   });
 
-  it('marks NEXT_PUBLIC_API_URL as bootstrap-only in the hub env editor', () => {
-    const apiUrl = ENV_VARS.find((v) => v.name === 'NEXT_PUBLIC_API_URL');
-    assert.ok(apiUrl, 'NEXT_PUBLIC_API_URL should be in registry');
-    assert.equal(apiUrl.runtimeEditable, false);
+  it('marks client-bundled NEXT_PUBLIC vars as bootstrap-only in the hub env editor', () => {
+    for (const name of BOOTSTRAP_ONLY_NEXT_PUBLIC_VARS) {
+      const envVar = ENV_VARS.find((v) => v.name === name);
+      assert.ok(envVar, `${name} should be in registry`);
+      assert.equal(envVar.runtimeEditable, false, `${name} should be bootstrap-only`);
+    }
   });
 
   it('no HINDSIGHT_* vars remain after D-1 cleanup', () => {
@@ -332,11 +342,21 @@ describe('PATCH /api/config/env (route)', () => {
     }
   });
 
-  it('rejects NEXT_PUBLIC_API_URL from hub writes because the browser bundle reads it at build time', async () => {
+  it('rejects client-bundled NEXT_PUBLIC vars from hub writes because the browser reads them at build time', async () => {
     const { configRoutes } = await import('../dist/routes/config.js');
     const tempRoot = mkdtempSync(resolve(tmpdir(), 'cat-cafe-env-'));
     const envFilePath = resolve(tempRoot, '.env');
-    writeFileSync(envFilePath, 'NEXT_PUBLIC_API_URL=http://localhost:3004\n', 'utf8');
+    writeFileSync(
+      envFilePath,
+      [
+        'NEXT_PUBLIC_API_URL=http://localhost:3004',
+        'NEXT_PUBLIC_WHISPER_URL=http://localhost:9876',
+        'NEXT_PUBLIC_LLM_POSTPROCESS_URL=http://localhost:9878',
+        'NEXT_PUBLIC_PROJECT_ROOT=/tmp/project',
+        'NEXT_PUBLIC_DEBUG_SKIP_FILE_CHANGE_UI=0',
+      ].join('\n') + '\n',
+      'utf8',
+    );
 
     const app = Fastify({ logger: false });
     try {
@@ -347,19 +367,22 @@ describe('PATCH /api/config/env (route)', () => {
       });
       await app.ready();
 
-      const res = await app.inject({
-        method: 'PATCH',
-        url: '/api/config/env',
-        headers: { 'x-cat-cafe-user': 'codex' },
-        payload: {
-          updates: [{ name: 'NEXT_PUBLIC_API_URL', value: 'http://localhost:3999' }],
-        },
-      });
+      const beforeRaw = readFileSync(envFilePath, 'utf8');
+      for (const name of BOOTSTRAP_ONLY_NEXT_PUBLIC_VARS) {
+        const res = await app.inject({
+          method: 'PATCH',
+          url: '/api/config/env',
+          headers: { 'x-cat-cafe-user': 'codex' },
+          payload: {
+            updates: [{ name, value: `${name}-changed` }],
+          },
+        });
 
-      assert.equal(res.statusCode, 400);
-      const body = JSON.parse(res.payload);
-      assert.match(body.error, /not editable/);
-      assert.equal(readFileSync(envFilePath, 'utf8'), 'NEXT_PUBLIC_API_URL=http://localhost:3004\n');
+        assert.equal(res.statusCode, 400, `${name} should be rejected`);
+        const body = JSON.parse(res.payload);
+        assert.match(body.error, /not editable/);
+        assert.equal(readFileSync(envFilePath, 'utf8'), beforeRaw);
+      }
     } finally {
       await app.close();
       rmSync(tempRoot, { recursive: true, force: true });

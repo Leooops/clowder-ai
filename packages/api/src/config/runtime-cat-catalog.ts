@@ -1,5 +1,5 @@
 import { mkdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
 import type {
   CatBreed,
   CatCafeConfig,
@@ -15,6 +15,7 @@ import { clearBudgetCache } from './cat-budgets.js';
 import { _resetCachedConfig, loadCatConfig, toAllCatConfigs } from './cat-config-loader.js';
 import { clearVoiceCache } from './cat-voices.js';
 import { bootstrapCatCatalog, readCatCatalog, resolveCatCatalogPath } from './cat-catalog-store.js';
+import { resolveProjectTemplatePath } from './project-template-path.js';
 
 export interface RuntimeCatInput {
   catId: string;
@@ -80,15 +81,6 @@ interface BreedVariantLocation {
   isDefaultVariant: boolean;
 }
 
-function resolveTemplatePath(projectRoot: string): string {
-  const envPath = process.env.CAT_TEMPLATE_PATH?.trim();
-  if (envPath) {
-    const absoluteEnvPath = resolve(envPath);
-    if (absoluteEnvPath.startsWith(resolve(projectRoot))) return absoluteEnvPath;
-  }
-  return join(projectRoot, 'cat-template.json');
-}
-
 function normalizeMentionPatterns(catId: string, mentionPatterns: readonly string[]): string[] {
   const values = mentionPatterns
     .map((pattern) => pattern.trim())
@@ -109,7 +101,7 @@ function normalizeOwnerMentionPatterns(mentionPatterns: readonly string[]): stri
 }
 
 function readOrBootstrapCatalog(projectRoot: string): CatCafeConfig {
-  const templatePath = resolveTemplatePath(projectRoot);
+  const templatePath = resolveProjectTemplatePath(projectRoot);
   bootstrapCatCatalog(projectRoot, templatePath);
   const catalog = readCatCatalog(projectRoot);
   if (!catalog) {
@@ -120,7 +112,7 @@ function readOrBootstrapCatalog(projectRoot: string): CatCafeConfig {
 
 function isSeedCat(projectRoot: string, catId: string): boolean {
   try {
-    const templatePath = resolveTemplatePath(projectRoot);
+    const templatePath = resolveProjectTemplatePath(projectRoot);
     const seedCats = toAllCatConfigs(loadCatConfig(templatePath));
     return Object.prototype.hasOwnProperty.call(seedCats, catId);
   } catch {

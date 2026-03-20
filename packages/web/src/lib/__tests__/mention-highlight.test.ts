@@ -7,7 +7,7 @@ afterEach(() => {
 
 describe('mention highlight cache', () => {
   it('preserves aliases for unavailable cats in historical transcript rendering', async () => {
-    const module = await import('@/lib/mention-highlight');
+    const mentionHighlightModule = await import('@/lib/mention-highlight');
     const cats: CatData[] = [
       {
         id: 'spark',
@@ -29,13 +29,13 @@ describe('mention highlight cache', () => {
       },
     ];
 
-    module.refreshMentionData(cats);
+    mentionHighlightModule.refreshMentionData(cats);
 
-    const toCat = module.getMentionToCat();
+    const toCat = mentionHighlightModule.getMentionToCat();
     expect(toCat.spark).toBe('spark');
     expect(toCat['火花猫']).toBe('spark');
 
-    const re = module.getMentionRe();
+    const re = mentionHighlightModule.getMentionRe();
     re.lastIndex = 0;
     expect(re.exec('历史消息里仍然提到 @spark')).not.toBeNull();
   });

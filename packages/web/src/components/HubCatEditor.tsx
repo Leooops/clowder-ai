@@ -269,19 +269,19 @@ export function HubCatEditor({ cat, draft, open, onClose, onSaved }: HubCatEdito
           return;
         }
         if (strategyBaselineHasOverride && baselineStrategyPayload) {
-          rollbackSteps.push(() =>
-            apiFetch(`/api/config/session-strategy/${cat.id}`, {
+          rollbackSteps.push(async () => {
+            await apiFetch(`/api/config/session-strategy/${cat.id}`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(baselineStrategyPayload),
-            }),
-          );
+            });
+          });
         } else {
-          rollbackSteps.push(() =>
-            apiFetch(`/api/config/session-strategy/${cat.id}`, {
+          rollbackSteps.push(async () => {
+            await apiFetch(`/api/config/session-strategy/${cat.id}`, {
               method: 'DELETE',
-            }),
-          );
+            });
+          });
         }
       }
 
@@ -300,19 +300,19 @@ export function HubCatEditor({ cat, draft, open, onClose, onSaved }: HubCatEdito
       const persistedCatId = persistedCatBody.cat?.id ?? cat?.id ?? null;
       if (persistedCatId) {
         if (cat && rollbackCatPayload) {
-          rollbackSteps.push(() =>
-            apiFetch(`/api/cats/${persistedCatId}`, {
+          rollbackSteps.push(async () => {
+            await apiFetch(`/api/cats/${persistedCatId}`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(rollbackCatPayload),
-            }),
-          );
+            });
+          });
         } else if (!cat) {
-          rollbackSteps.push(() =>
-            apiFetch(`/api/cats/${persistedCatId}`, {
+          rollbackSteps.push(async () => {
+            await apiFetch(`/api/cats/${persistedCatId}`, {
               method: 'DELETE',
-            }),
-          );
+            });
+          });
         }
       }
 

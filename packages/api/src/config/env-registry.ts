@@ -590,6 +590,7 @@ export const ENV_VARS: EnvDefinition[] = [
     description: 'Whisper ASR 服务地址',
     category: 'frontend',
     sensitive: false,
+    runtimeEditable: false,
   },
   {
     name: 'NEXT_PUBLIC_LLM_POSTPROCESS_URL',
@@ -597,6 +598,7 @@ export const ENV_VARS: EnvDefinition[] = [
     description: 'LLM 后处理服务地址',
     category: 'frontend',
     sensitive: false,
+    runtimeEditable: false,
   },
   {
     name: 'NEXT_PUBLIC_PROJECT_ROOT',
@@ -604,6 +606,7 @@ export const ENV_VARS: EnvDefinition[] = [
     description: '前端项目根路径',
     category: 'frontend',
     sensitive: false,
+    runtimeEditable: false,
   },
   {
     name: 'NEXT_PUBLIC_DEBUG_SKIP_FILE_CHANGE_UI',
@@ -611,6 +614,7 @@ export const ENV_VARS: EnvDefinition[] = [
     description: '设为 1 跳过文件变更 UI',
     category: 'frontend',
     sensitive: false,
+    runtimeEditable: false,
   },
 
   // --- push ---

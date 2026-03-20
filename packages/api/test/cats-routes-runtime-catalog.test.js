@@ -81,6 +81,12 @@ function createTemplateOnlyProject(template) {
   return projectRoot;
 }
 
+function createMonorepoTemplateOnlyProject(template) {
+  const projectRoot = createTemplateOnlyProject(template);
+  writeFileSync(join(projectRoot, 'pnpm-workspace.yaml'), 'packages:\n  - "packages/*"\n');
+  return projectRoot;
+}
+
 function loadRepoTemplate() {
   return JSON.parse(readFileSync(join(process.cwd(), '..', '..', 'cat-template.json'), 'utf-8'));
 }
@@ -201,6 +207,34 @@ describe('cats routes read runtime catalog', { concurrency: false }, () => {
     );
 
     await app.close();
+  });
+
+  it('GET /api/cats falls back to the readable active project root when CAT_TEMPLATE_PATH is stale', async () => {
+    const projectRoot = createMonorepoTemplateOnlyProject(makeCatalog('local-template', '本地模板猫'));
+    const staleRoot = mkdtempSync(join(tmpdir(), 'cats-route-catalog-stale-'));
+    tempDirs.push(staleRoot);
+    const previousCwd = process.cwd();
+    process.chdir(projectRoot);
+    process.env.CAT_TEMPLATE_PATH = join(staleRoot, 'missing-template.json');
+
+    const Fastify = (await import('fastify')).default;
+    const { catsRoutes } = await import('../dist/routes/cats.js');
+
+    const app = Fastify();
+    try {
+      await app.register(catsRoutes);
+
+      const res = await app.inject({ method: 'GET', url: '/api/cats' });
+      assert.equal(res.statusCode, 200);
+      const body = JSON.parse(res.body);
+      const localTemplateCat = body.cats.find((cat) => cat.id === 'local-template');
+      assert.ok(localTemplateCat, 'GET /api/cats should read the local project template when CAT_TEMPLATE_PATH is stale');
+      assert.equal(localTemplateCat.source, 'seed');
+      assert.equal(readFileSync(join(projectRoot, '.cat-cafe', 'cat-catalog.json'), 'utf-8').includes('local-template'), true);
+    } finally {
+      process.chdir(previousCwd);
+      await app.close();
+    }
   });
 
   it('GET /api/cats recomputes seed accountRef from the active bootstrap binding', async () => {
