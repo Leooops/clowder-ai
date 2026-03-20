@@ -21,6 +21,15 @@ function uniqueTags(tags: string[]): string[] {
   return Array.from(new Set(tags));
 }
 
+function autoSlug(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, '-')
+    .replace(/[^a-z0-9\u4e00-\u9fff-]/g, '')
+    .slice(0, 40);
+}
+
 function currentAliasTags(form: HubCatEditorFormState, cat?: CatData | null): string[] {
   const raw = splitMentionPatterns(form.mentionPatterns).map(normalizeMentionPattern).filter(Boolean);
   const catId = cat?.id ?? form.catId.trim();
@@ -48,15 +57,21 @@ export function IdentitySection({
     <SectionCard title="身份信息">
       {!cat ? (
         <div className="space-y-2">
-          <TextField label="Cat ID" value={form.catId} onChange={(value) => onChange({ catId: value })} required placeholder="唯一标识符，如 new-cat" />
           <TextField
             label="名称"
             ariaLabel="Name"
             value={form.name}
-            onChange={(value) => onChange({ name: value, displayName: value })}
+            onChange={(value) => {
+              const patch: FormPatch = { name: value, displayName: value };
+              if (!form.catId || form.catId === autoSlug(form.name)) {
+                patch.catId = autoSlug(value);
+              }
+              onChange(patch);
+            }}
             required
             placeholder="成员显示名称，如 我的助手"
           />
+          <TextField label="Cat ID" value={form.catId} onChange={(value) => onChange({ catId: value })} required placeholder="自动生成，可手动修改" />
         </div>
       ) : (
         <TextField label="名称" ariaLabel="Name" value={form.name} onChange={(value) => onChange({ name: value, displayName: value })} />
@@ -280,7 +295,8 @@ export function RoutingSection({
         onChange={(tags) => onChange({ mentionPatterns: joinTags(tags) })}
         addLabel="+ 添加"
         placeholder="@砚砚"
-        emptyLabel="(暂无别名)"
+        emptyLabel="(至少添加 1 个别名，否则无法 @)"
+        minCount={1}
       />
       <textarea
         aria-label="Aliases"
