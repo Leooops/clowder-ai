@@ -239,7 +239,10 @@ export function consumeBackgroundSystemInfo(
       // F130: Governance gate blocked — store actionable card for when thread is focused.
       // Dedup by projectPath: if card already exists for this project, update invocationId.
       const projectPath = typeof parsed.projectPath === 'string' ? parsed.projectPath : '';
-      const reasonKind = (parsed.reasonKind as string) ?? 'needs_bootstrap';
+      const reasonKind = ((parsed.reasonKind as string) ?? 'needs_bootstrap') as
+        | 'needs_bootstrap'
+        | 'needs_confirmation'
+        | 'files_missing';
       const invId = typeof parsed.invocationId === 'string' ? parsed.invocationId : undefined;
       const threadMessages = options.store.getThreadState(msg.threadId).messages;
       const existing = threadMessages.find(
