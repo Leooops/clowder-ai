@@ -20,6 +20,7 @@ import { spawn as nodeSpawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { type CatId, createCatId } from '@cat-cafe/shared';
 import { getCatModel } from '../../../../../config/cat-models.js';
+import { createModuleLogger } from '../../../../../infrastructure/logger.js';
 import { formatCliExitError } from '../../../../../utils/cli-format.js';
 import { formatCliNotFoundError, resolveCliCommand } from '../../../../../utils/cli-resolve.js';
 import { isCliError, isCliTimeout, isLivenessWarning, spawnCli } from '../../../../../utils/cli-spawn.js';
@@ -28,6 +29,8 @@ import type { AgentMessage, AgentService, AgentServiceOptions, MessageMetadata, 
 import { appendLocalImagePathHints, collectImageAccessDirectories } from '../providers/image-cli-bridge.js';
 import { extractImagePaths } from '../providers/image-paths.js';
 import { isKnownPostResponseCandidatesCrash, isResultErrorEvent, transformGeminiEvent } from './gemini-event-parser.js';
+
+const log = createModuleLogger('gemini-agent');
 
 type GeminiAdapter = 'gemini-cli' | 'antigravity';
 /**
@@ -282,7 +285,7 @@ export class GeminiAgentService implements AgentService {
           () => {
             try {
               process.kill(-pid, 'SIGTERM');
-              console.log(`[gemini] Antigravity process group ${pid} killed via signal`);
+              log.info({ pid }, `[gemini] Antigravity process group killed via signal`);
             } catch {
               /* already exited */
             }

@@ -1794,7 +1794,7 @@ describe('HubCatEditor', () => {
     const postCall = mockApiFetch.mock.calls.find(([path]) => path === '/api/cats');
     expect(postCall).toBeTruthy();
     const payload = JSON.parse(String(postCall?.[1]?.body));
-    expect(payload.mentionPatterns).toEqual(['@运行时审查猫', '@runtime-reviewer']);
+    expect(payload.mentionPatterns).toEqual(['@runtime-reviewer']);
     const codexConfigPatches = mockApiFetch.mock.calls.filter(
       ([path, init]) => path === '/api/config' && init?.method === 'PATCH',
     );

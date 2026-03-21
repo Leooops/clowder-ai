@@ -6,11 +6,16 @@
  *
  * Shared state files (must match .githooks/pre-commit + shared-rules.md §14):
  *   - docs/BACKLOG.md
+ *   - docs/ROADMAP.md
  *   - cat-template.json
+ *   - cat-config.json
  */
 import { execFileSync } from 'node:child_process';
+import { createModuleLogger } from '../infrastructure/logger.js';
 
-const SHARED_STATE_PATTERN = /^(docs\/BACKLOG\.md|cat-template\.json)$/;
+const log = createModuleLogger('shared-state-preflight');
+
+const SHARED_STATE_PATTERN = /^(docs\/BACKLOG\.md|docs\/ROADMAP\.md|cat-template\.json|cat-config\.json)$/;
 
 interface GitExecResult {
   ok: boolean;
@@ -69,10 +74,7 @@ export function checkSharedStatePreflight(projectRoot: string): SharedStatePrefl
     const repoProbe = gitExec(['rev-parse', '--is-inside-work-tree'], projectRoot);
     const isGitRepo = repoProbe.ok && repoProbe.stdout === 'true';
     if (!isGitRepo) {
-      console.info('[shared-state-preflight] skip git checks (non-git project root)', {
-        projectRoot,
-        exitCode: repoProbe.exitCode,
-      });
+      log.info({ projectRoot, exitCode: repoProbe.exitCode }, 'skip git checks (non-git project root)');
       return { ok: true };
     }
 
@@ -113,9 +115,10 @@ export function checkSharedStatePreflight(projectRoot: string): SharedStatePrefl
       ...(unpushedShared.length > 0 ? { unpushedFiles: [...new Set(unpushedShared)] } : {}),
     };
   } catch (error) {
-    console.warn('[shared-state-preflight] fail-open on internal preflight error', {
-      error: error instanceof Error ? error.message : String(error),
-    });
+    log.warn(
+      { error: error instanceof Error ? error.message : String(error) },
+      'fail-open on internal preflight error',
+    );
     // Git not available or other error — don't block
     return { ok: true };
   }

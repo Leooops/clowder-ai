@@ -83,15 +83,12 @@ interface BreedVariantLocation {
   isDefaultVariant: boolean;
 }
 
-function normalizeMentionPatterns(catId: string, mentionPatterns: readonly string[]): string[] {
+function normalizeMentionPatterns(_catId: string, mentionPatterns: readonly string[]): string[] {
   const values = mentionPatterns
     .map((pattern) => pattern.trim())
     .filter((pattern) => pattern.length > 0)
     .map((pattern) => (pattern.startsWith('@') ? pattern : `@${pattern}`));
-  const unique = Array.from(new Set(values));
-  const canonical = `@${catId}`;
-  if (!unique.includes(canonical)) unique.unshift(canonical);
-  return unique;
+  return Array.from(new Set(values));
 }
 
 function normalizeOwnerMentionPatterns(mentionPatterns: readonly string[]): string[] {

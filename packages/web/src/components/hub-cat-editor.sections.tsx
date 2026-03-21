@@ -37,11 +37,8 @@ function autoSlug(name: string): string {
     .slice(0, 40);
 }
 
-function currentAliasTags(form: HubCatEditorFormState, cat?: CatData | null): string[] {
-  const raw = splitMentionPatterns(form.mentionPatterns).map(normalizeMentionPattern).filter(Boolean);
-  const catId = cat?.id ?? form.catId.trim();
-  const locked = catId ? [canonicalMentionPattern(catId)] : [];
-  return uniqueTags([...locked, ...raw]);
+function currentAliasTags(form: HubCatEditorFormState): string[] {
+  return splitMentionPatterns(form.mentionPatterns).map(normalizeMentionPattern).filter(Boolean);
 }
 
 export function IdentitySection({
@@ -340,7 +337,7 @@ export function RoutingSection({
   form: HubCatEditorFormState;
   onChange: (patch: FormPatch) => void;
 }) {
-  const aliases = currentAliasTags(form, cat);
+  const aliases = currentAliasTags(form);
   const catId = cat?.id ?? form.catId.trim();
   return (
     <SectionCard title="别名与 @ 路由">

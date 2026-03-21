@@ -22,7 +22,10 @@ import type {
 } from '@cat-cafe/shared';
 import { createCatId } from '@cat-cafe/shared';
 import { z } from 'zod';
+import { createModuleLogger } from '../infrastructure/logger.js';
 import { bootstrapCatCatalog, readCatCatalogRaw, resolveCatCatalogPath } from './cat-catalog-store.js';
+
+const log = createModuleLogger('cat-config');
 
 /**
  * Default cat-template.json location (repo root).
@@ -251,26 +254,12 @@ export function loadCatConfig(filePath?: string): CatCafeConfig {
     }
   }
 
-  // Validate that configured mentionPatterns always include the canonical @catId handle.
-  //
-  // Why: system prompts may instruct users to disambiguate by using @catId. If a config
-  // supplies a custom mentionPatterns list but omits @catId, routing instructions can
-  // drift from the actually-routable handles.
+  // Validate that configured mentionPatterns are non-empty.
+  // The canonical @catId handle is no longer required — users may replace it
+  // with custom aliases via the Hub editor, as long as at least one alias exists.
   for (const breed of result.data.breeds) {
-    const requiredBreedHandle = `@${breed.catId}`;
-    if (!breed.mentionPatterns.includes(requiredBreedHandle)) {
-      throw new Error(`Breed "${breed.id}": mentionPatterns must include ${requiredBreedHandle}`);
-    }
-
-    for (const variant of breed.variants) {
-      if (!variant.mentionPatterns || variant.mentionPatterns.length === 0) continue;
-      const catId = variant.catId ?? breed.catId;
-      const requiredVariantHandle = `@${catId}`;
-      if (!variant.mentionPatterns.includes(requiredVariantHandle)) {
-        throw new Error(
-          `Breed "${breed.id}" variant "${variant.id}": mentionPatterns must include ${requiredVariantHandle}`,
-        );
-      }
+    if (breed.mentionPatterns.length === 0) {
+      throw new Error(`Breed "${breed.id}": mentionPatterns must have at least one entry`);
     }
   }
 
@@ -448,10 +437,7 @@ function getCachedConfig(): CatCafeConfig | null {
       _cachedConfig = loadCatConfig();
     } catch (err) {
       _configLoadFailed = true;
-      console.warn(
-        '[cat-config] Failed to load runtime catalog/template config, F24 toggle will default to enabled:',
-        err,
-      );
+      log.warn({ err }, 'Failed to load runtime catalog/template config, F24 toggle will default to enabled');
       return null;
     }
   }

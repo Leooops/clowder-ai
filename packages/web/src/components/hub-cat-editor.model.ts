@@ -408,8 +408,7 @@ export function buildCatPayload(form: HubCatEditorFormState, cat?: CatData | nul
       new Set(
         splitMentionPatterns(form.mentionPatterns)
           .map(normalizeMentionPattern)
-          .filter(Boolean)
-          .concat(!cat && form.catId.trim() ? [canonicalMentionPattern(form.catId.trim())] : []),
+          .filter(Boolean),
       ),
     ),
     roleDescription: trimText(form.roleDescription),
