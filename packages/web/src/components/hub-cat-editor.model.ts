@@ -446,6 +446,6 @@ export function buildCatPayload(form: HubCatEditorFormState, cat?: CatData | nul
     ...accountRefPatch,
     ...mcpSupportPatch,
     defaultModel: trimText(form.defaultModel),
-    ...(cliConfigArgsList.length > 0 ? { cliConfigArgs: cliConfigArgsList } : {}),
+    cliConfigArgs: cliConfigArgsList,
   };
 }
