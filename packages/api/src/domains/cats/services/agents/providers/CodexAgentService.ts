@@ -243,8 +243,9 @@ export class CodexAgentService implements AgentService {
     const approvalArgs = ['--config', `approval_policy="${approvalPolicy}"`];
     const catCafeMcpArgs = buildCatCafeMcpConfigArgs(options?.workingDirectory, options?.callbackEnv);
     const gitRepoArgs = buildGitRepoArgs(options?.workingDirectory);
-    // User-defined --config overrides from the member editor.
-    const userConfigArgs = (options?.cliConfigArgs ?? []).flatMap((arg) => ['--config', arg]);
+    // User-defined CLI args from the member editor — passed as-is, no implicit wrapping.
+    // Each entry is split by whitespace (e.g. "--config model_reasoning_effort=\"low\"").
+    const userConfigArgs = (options?.cliConfigArgs ?? []).flatMap((arg) => arg.trim().split(/\s+/));
 
     // Codex CLI deprecated OPENAI_BASE_URL env var.
     // Configure a custom model provider via --config model_providers.*

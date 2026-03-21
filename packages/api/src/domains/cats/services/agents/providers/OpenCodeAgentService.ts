@@ -176,21 +176,12 @@ export class OpenCodeAgentService implements AgentService {
     // JSON event stream output
     args.push('--format', 'json');
 
-    // User-defined overrides from the member editor.
-    // OpenCode CLI uses named flags (--variant, --agent), not --config.
-    // Map known key=value entries to their corresponding CLI flags.
+    // User-defined CLI args from the member editor.
+    // Each entry is passed as-is (e.g. "--variant low" → args.push('--variant', 'low')).
+    // No implicit mapping — the user writes the exact flags the CLI expects.
     for (const arg of cliConfigArgs ?? []) {
-      const eqIdx = arg.indexOf('=');
-      if (eqIdx > 0) {
-        const key = arg.slice(0, eqIdx).trim();
-        const value = arg.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, '');
-        if (key === 'model_reasoning_effort' || key === 'variant') {
-          args.push('--variant', value);
-        } else if (key === 'agent') {
-          args.push('--agent', value);
-        }
-        // Other keys are silently ignored — opencode has no --config flag.
-      }
+      const parts = arg.trim().split(/\s+/);
+      args.push(...parts);
     }
 
     // Prompt as positional arg
