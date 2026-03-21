@@ -71,6 +71,7 @@ const createNormalCatSchema = baseCatSchema.extend({
   defaultModel: z.string().min(1),
   mcpSupport: z.boolean().optional(),
   cli: cliSchema.optional(),
+  cliConfigArgs: z.array(z.string().min(1)).optional(),
 });
 
 const createAntigravityCatSchema = baseCatSchema.extend({
@@ -103,6 +104,7 @@ const updateCatSchema = z.object({
   mcpSupport: z.boolean().optional(),
   cli: cliSchema.optional(),
   commandArgs: z.array(z.string().min(1)).optional(),
+  cliConfigArgs: z.array(z.string().min(1)).optional(),
 });
 
 function resolveOperator(raw: unknown): string | null {
@@ -257,6 +259,7 @@ async function toCatResponse(
     strengths: cat.strengths,
     sessionChain: cat.sessionChain,
     commandArgs: cat.commandArgs,
+    cliConfigArgs: cat.cliConfigArgs,
     variantLabel: cat.variantLabel ?? undefined,
     isDefaultVariant: cat.isDefaultVariant ?? undefined,
     breedDisplayName: cat.breedDisplayName ?? undefined,
@@ -421,6 +424,7 @@ export const catsRoutes: FastifyPluginAsync<CatsRoutesOptions> = async (app, opt
               body.client === 'google' ||
               body.client === 'opencode'),
           cli: body.cli ?? defaultCliForClient(body.client),
+          ...(body.cliConfigArgs ? { cliConfigArgs: body.cliConfigArgs } : {}),
         });
       }
     } catch (err) {
@@ -532,6 +536,7 @@ export const catsRoutes: FastifyPluginAsync<CatsRoutesOptions> = async (app, opt
         ...(!hasCommandArgsPatch ? antigravityCliPatch : {}),
         ...(body.cli !== undefined ? { cli: body.cli } : {}),
         ...(body.available !== undefined ? { available: body.available } : {}),
+        ...(body.cliConfigArgs !== undefined ? { cliConfigArgs: body.cliConfigArgs } : {}),
       });
 
       const resolved = await reconcileCatRegistry(projectRoot, managedIdsBefore, opts.onCatalogChanged);

@@ -57,7 +57,7 @@ export class OpenCodeAgentService implements AgentService {
   async *invoke(prompt: string, options?: AgentServiceOptions): AsyncIterable<AgentMessage> {
     // P1-2: runtime model override takes precedence over constructor model
     const effectiveModel = options?.callbackEnv?.CAT_CAFE_ANTHROPIC_MODEL_OVERRIDE ?? this.model;
-    const args = this.buildArgs(prompt, options?.sessionId, effectiveModel);
+    const args = this.buildArgs(prompt, options?.sessionId, effectiveModel, options?.cliConfigArgs);
     const cwd = options?.workingDirectory;
     const childEnv = this.buildEnv(options?.callbackEnv);
     const metadata: MessageMetadata = { provider: 'opencode', model: effectiveModel };
@@ -159,7 +159,7 @@ export class OpenCodeAgentService implements AgentService {
     }
   }
 
-  private buildArgs(prompt: string, sessionId?: string, model?: string): string[] {
+  private buildArgs(prompt: string, sessionId?: string, model?: string, cliConfigArgs?: readonly string[]): string[] {
     const args = ['run'];
 
     // Session resume
@@ -175,6 +175,11 @@ export class OpenCodeAgentService implements AgentService {
 
     // JSON event stream output
     args.push('--format', 'json');
+
+    // User-defined --config overrides from the member editor
+    for (const arg of cliConfigArgs ?? []) {
+      args.push('--config', arg);
+    }
 
     // Prompt as positional arg
     args.push(prompt);

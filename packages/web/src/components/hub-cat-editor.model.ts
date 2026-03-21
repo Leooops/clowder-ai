@@ -27,6 +27,7 @@ export interface HubCatEditorFormState {
   accountRef: string;
   defaultModel: string;
   commandArgs: string;
+  cliConfigArgs: string;
   sessionChain: SessionChainValue;
   maxPromptTokens: string;
   maxContextTokens: string;
@@ -254,6 +255,7 @@ export function initialState(cat?: CatData | null, draft?: HubCatEditorDraft | n
       '',
     defaultModel: cat?.defaultModel ?? createDraft?.defaultModel ?? '',
     commandArgs: cat?.commandArgs?.join(' ') ?? createDraft?.commandArgs ?? '',
+    cliConfigArgs: cat?.cliConfigArgs?.join('\n') ?? '',
     sessionChain: String(cat?.sessionChain ?? true) as SessionChainValue,
     maxPromptTokens: cat?.contextBudget ? String(cat.contextBudget.maxPromptTokens) : '',
     maxContextTokens: cat?.contextBudget ? String(cat.contextBudget.maxContextTokens) : '',
@@ -432,6 +434,11 @@ export function buildCatPayload(form: HubCatEditorFormState, cat?: CatData | nul
     };
   }
 
+  const cliConfigArgsList = trimText(form.cliConfigArgs)
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
   return {
     ...common,
     ...(cat ? { name: updateName } : { catId: trimText(form.catId), name: createName }),
@@ -439,5 +446,6 @@ export function buildCatPayload(form: HubCatEditorFormState, cat?: CatData | nul
     ...accountRefPatch,
     ...mcpSupportPatch,
     defaultModel: trimText(form.defaultModel),
+    ...(cliConfigArgsList.length > 0 ? { cliConfigArgs: cliConfigArgsList } : {}),
   };
 }

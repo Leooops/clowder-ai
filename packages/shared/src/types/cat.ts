@@ -61,6 +61,8 @@ export interface CatConfig {
   readonly strengths?: readonly string[];
   /** F127 Screen 3: whether session chain is enabled for this member */
   readonly sessionChain?: boolean;
+  /** F127: Extra CLI --config key=value pairs passed to the client at invocation time. */
+  readonly cliConfigArgs?: readonly string[];
 }
 
 /**

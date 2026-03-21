@@ -100,6 +100,23 @@ export function AdvancedRuntimeSection({
           onChange={(value) => onChange({ sessionChain: value as HubCatEditorFormState['sessionChain'] })}
           tone="success"
         />
+        {form.client !== 'antigravity' ? (
+          <>
+            <label className="block text-sm font-medium text-[#3D2E22]">
+              CLI Config 参数
+              <textarea
+                value={form.cliConfigArgs}
+                onChange={(event) => onChange({ cliConfigArgs: event.target.value })}
+                rows={3}
+                className="mt-1 w-full rounded-xl border border-[#CFE5D5] bg-[#F5FBF6] px-3 py-2 font-mono text-xs text-[#2D2118] outline-none transition focus:border-[#6C7A6D] focus:ring-2 focus:ring-[#CFE5D5]"
+                placeholder={'每行一个 key=value，例如：\nmodel_reasoning_effort="low"\napproval_policy="on-request"'}
+              />
+            </label>
+            <p className="text-[11px] leading-4 text-[#8A776B]">
+              传递给 CLI 的 --config 参数。每行一条，格式为 key=&quot;value&quot;。会覆盖默认值。
+            </p>
+          </>
+        ) : null}
       </div>
 
       {cat ? (

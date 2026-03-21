@@ -785,6 +785,7 @@ export async function* invokeSingleCat(deps: InvocationDeps, params: InvocationP
       ...(sessionId ? { cliSessionId: sessionId } : {}),
       // F118 Phase B: Enable liveness probe with defaults for all CLI providers
       livenessProbe: {},
+      ...(catConfig?.cliConfigArgs?.length ? { cliConfigArgs: catConfig.cliConfigArgs } : {}),
     };
 
     let lastErrorMessage: string | undefined;

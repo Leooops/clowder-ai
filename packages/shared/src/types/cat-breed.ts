@@ -86,6 +86,9 @@ export interface CatVariant {
   readonly teamStrengths?: string;
   /** F-Ground-3: Caution note. null = explicitly no caution (overrides breed). */
   readonly caution?: string | null;
+  /** F127: Extra CLI --config key=value pairs passed to the client at invocation time.
+   *  Each entry is a raw config string, e.g. 'model_reasoning_effort="low"'. */
+  readonly cliConfigArgs?: readonly string[];
 }
 
 /**

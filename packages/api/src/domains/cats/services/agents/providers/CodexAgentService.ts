@@ -243,6 +243,8 @@ export class CodexAgentService implements AgentService {
     const approvalArgs = ['--config', `approval_policy="${approvalPolicy}"`];
     const catCafeMcpArgs = buildCatCafeMcpConfigArgs(options?.workingDirectory, options?.callbackEnv);
     const gitRepoArgs = buildGitRepoArgs(options?.workingDirectory);
+    // User-defined --config overrides from the member editor.
+    const userConfigArgs = (options?.cliConfigArgs ?? []).flatMap((arg) => ['--config', arg]);
 
     // Codex CLI deprecated OPENAI_BASE_URL env var.
     // Configure a custom model provider via --config model_providers.*
@@ -277,6 +279,7 @@ export class CodexAgentService implements AgentService {
           ...reasoningArgs,
           ...approvalArgs,
           ...customProviderArgs,
+          ...userConfigArgs,
           ...gitRepoArgs,
           ...catCafeMcpArgs,
           ...imageArgs,
@@ -293,6 +296,7 @@ export class CodexAgentService implements AgentService {
           '.git',
           ...approvalArgs,
           ...customProviderArgs,
+          ...userConfigArgs,
           ...gitRepoArgs,
           ...catCafeMcpArgs,
           ...imageArgs,
