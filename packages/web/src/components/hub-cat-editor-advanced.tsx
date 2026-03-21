@@ -100,7 +100,7 @@ export function AdvancedRuntimeSection({
           onChange={(value) => onChange({ sessionChain: value as HubCatEditorFormState['sessionChain'] })}
           tone="success"
         />
-        {form.client !== 'antigravity' ? (
+        {form.client === 'openai' || form.client === 'opencode' ? (
           <>
             <label className="block text-sm font-medium text-[#3D2E22]">
               CLI Config 参数
@@ -109,15 +109,25 @@ export function AdvancedRuntimeSection({
                 onChange={(event) => onChange({ cliConfigArgs: event.target.value })}
                 rows={3}
                 className="mt-1 w-full rounded-xl border border-[#CFE5D5] bg-[#F5FBF6] px-3 py-2 font-mono text-xs text-[#2D2118] outline-none transition focus:border-[#6C7A6D] focus:ring-2 focus:ring-[#CFE5D5]"
-                placeholder={'每行一个 key=value，例如：\nmodel_reasoning_effort="low"\napproval_policy="on-request"'}
+                placeholder={
+                  form.client === 'opencode'
+                    ? '每行一个 key=value，例如：\nmodel_reasoning_effort="low"\nvariant="minimal"'
+                    : '每行一个 key=value，例如：\nmodel_reasoning_effort="low"\napproval_policy="on-request"'
+                }
               />
             </label>
             <p className="text-[11px] leading-4 text-[#8A776B]">
-              每行一条 key=&quot;value&quot;。Codex 直接透传为 --config；OpenCode 映射为 --variant/--agent。
-              参考：
-              <a href="https://github.com/openai/codex" target="_blank" rel="noreferrer" className="underline">Codex</a>
-              {' · '}
-              <a href="https://opencode.ai/docs/cli" target="_blank" rel="noreferrer" className="underline">OpenCode</a>
+              {form.client === 'opencode' ? (
+                <>
+                  支持 model_reasoning_effort / variant / agent。
+                  参考：<a href="https://opencode.ai/docs/cli" target="_blank" rel="noreferrer" className="underline">OpenCode CLI</a>
+                </>
+              ) : (
+                <>
+                  每行一条，透传为 Codex --config 参数。
+                  参考：<a href="https://github.com/openai/codex" target="_blank" rel="noreferrer" className="underline">Codex CLI</a>
+                </>
+              )}
             </p>
           </>
         ) : null}
