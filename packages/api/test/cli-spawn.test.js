@@ -551,7 +551,10 @@ test('timeout event includes firstEventAt/lastEventAt/lastEventType when events 
   proc.stdout.write(JSON.stringify({ type: 'thread.started', thread_id: 'abc' }) + '\n');
 
   // Wait for timeout
-  await new Promise((r) => setTimeout(r, 100));
+  // End before silence exceeds the soft threshold: this test verifies that
+  // stderr activity resets probe silence, not that a later real quiet period
+  // suppresses warnings forever.
+  await new Promise((r) => setTimeout(r, 50));
   proc.stdout.end();
 
   const results = await promise;
@@ -661,9 +664,7 @@ test('B4: yields alive_but_silent warning during CLI silence', async () => {
         command: 'codex',
         args: [],
         timeoutMs: 500,
-        // Keep a clear margin above the final quiet window so CI scheduling jitter
-        // cannot turn an "active stderr" case into a false silent warning.
-        livenessProbe: { sampleIntervalMs: 30, softWarningMs: 160, stallWarningMs: 320 },
+        livenessProbe: { sampleIntervalMs: 30, softWarningMs: 80, stallWarningMs: 300 },
       },
       { spawnFn },
     ),
@@ -724,7 +725,7 @@ test('timeout includes rawArchivePath when passed in options', async () => {
     ),
   );
 
-  await new Promise((r) => setTimeout(r, 60));
+  await new Promise((r) => setTimeout(r, 100));
   proc.stdout.end();
 
   const results = await promise;
