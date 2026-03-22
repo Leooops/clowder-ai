@@ -6,6 +6,9 @@
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { mock } from 'node:test';
+import { ensureFakeCliOnPath } from './fake-cli-path.js';
+
+ensureFakeCliOnPath('opencode');
 
 export function createMockProcess(exitCode = 0) {
   const stdout = new PassThrough();

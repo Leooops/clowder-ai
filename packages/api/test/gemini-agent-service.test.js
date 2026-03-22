@@ -7,8 +7,11 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { describe, mock, test } from 'node:test';
+import { ensureFakeCliOnPath } from './helpers/fake-cli-path.js';
 
 const { GeminiAgentService } = await import('../dist/domains/cats/services/agents/providers/GeminiAgentService.js');
+
+ensureFakeCliOnPath('gemini');
 
 /** Helper: collect all items from async iterable */
 async function collect(iterable) {

@@ -10,10 +10,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { mock, test } from 'node:test';
+import { ensureFakeCliOnPath } from './helpers/fake-cli-path.js';
 
 const { ClaudeAgentService, pickGitBashPathFromWhere, resolveDefaultClaudeMcpServerPath } = await import(
   '../dist/domains/cats/services/agents/providers/ClaudeAgentService.js'
 );
+
+ensureFakeCliOnPath('claude');
 
 /** Helper: collect all items from async iterable */
 async function collect(iterable) {
