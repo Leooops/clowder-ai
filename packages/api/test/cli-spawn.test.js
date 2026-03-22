@@ -6,8 +6,8 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
-import { clearTimeout as clearKeepAliveTimeout, setTimeout as setKeepAliveTimeout } from 'node:timers';
 import { mock, test } from 'node:test';
+import { clearTimeout as clearKeepAliveTimeout, setTimeout as setKeepAliveTimeout } from 'node:timers';
 
 const { spawnCli, isCliError, isCliTimeout, isLivenessWarning, KILL_GRACE_MS, SEMANTIC_COMPLETION_GRACE_MS } =
   await import('../dist/utils/cli-spawn.js');
