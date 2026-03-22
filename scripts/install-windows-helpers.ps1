@@ -19,9 +19,24 @@ function Mount-InstallerSkills {
         }
         foreach ($skill in $skillItems) {
             $skillTarget = Join-Path $skillsRoot $skill.Name
-            if (Test-Path $skillTarget) {
-                Write-Ok "Skill already mounted: $skillTarget"
-                continue
+            $expectedTarget = Get-InstallerNormalizedPath -Path $skill.FullName
+            $existingItem = Get-Item -LiteralPath $skillTarget -Force -ErrorAction SilentlyContinue
+            if ($existingItem) {
+                $existingTarget = Get-InstallerSkillLinkTarget -Path $skillTarget
+                if ($existingTarget -eq $expectedTarget) {
+                    Write-Ok "Skill already mounted: $skillTarget"
+                    continue
+                }
+                $linkType = "$($existingItem.LinkType)"
+                if ($linkType -notin @("Junction", "SymbolicLink")) {
+                    Write-Warn "Skill target exists and is not a junction: $skillTarget"
+                    continue
+                }
+                Write-Warn "Refreshing stale skill mount: $skillTarget"
+                cmd /c rmdir "$skillTarget" 2>$null | Out-Null
+                if (Get-Item -LiteralPath $skillTarget -Force -ErrorAction SilentlyContinue) {
+                    throw "stale junction cleanup failed"
+                }
             }
             try {
                 cmd /c mklink /J "$skillTarget" "$($skill.FullName)" 2>$null | Out-Null
@@ -36,6 +51,41 @@ function Mount-InstallerSkills {
             }
         }
     }
+}
+
+function Get-InstallerNormalizedPath {
+    param([string]$Path)
+
+    if (-not $Path) {
+        return ""
+    }
+
+    try {
+        return [System.IO.Path]::GetFullPath($Path).TrimEnd('\', '/').ToLowerInvariant()
+    } catch {
+        return $Path.TrimEnd('\', '/').ToLowerInvariant()
+    }
+}
+
+function Get-InstallerSkillLinkTarget {
+    param([string]$Path)
+
+    $item = Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+    if (-not $item) {
+        return ""
+    }
+
+    $linkType = "$($item.LinkType)"
+    if ($linkType -notin @("Junction", "SymbolicLink")) {
+        return ""
+    }
+
+    $target = @($item.Target) | Where-Object { $_ } | Select-Object -First 1
+    if (-not $target) {
+        return ""
+    }
+
+    return Get-InstallerNormalizedPath -Path "$target"
 }
 
 function Add-ProcessPathPrefix {
@@ -103,7 +153,13 @@ function Test-LocalRedisUrl {
         return $false
     }
 
-    if ($uri.Host -notin @("localhost", "127.0.0.1")) {
+    $isLoopbackHost = $uri.Host -eq "localhost"
+    $ipAddress = $null
+    if (-not $isLoopbackHost -and [System.Net.IPAddress]::TryParse($uri.Host, [ref]$ipAddress)) {
+        $isLoopbackHost = [System.Net.IPAddress]::IsLoopback($ipAddress)
+    }
+
+    if (-not $isLoopbackHost) {
         return $false
     }
 
@@ -465,26 +521,19 @@ function Remove-ClaudeInstallerProfile {
 function Read-InstallerSecret {
     param([string]$Prompt)
 
-    Write-Host -NoNewline "$Prompt"
-    $input = ""
-    while ($true) {
-        $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-        if ($key.VirtualKeyCode -eq 13) {
-            # Enter pressed
-            Write-Host ""
-            break
-        } elseif ($key.VirtualKeyCode -eq 8) {
-            # Backspace
-            if ($input.Length -gt 0) {
-                $input = $input.Substring(0, $input.Length - 1)
-                Write-Host -NoNewline "`b `b"
-            }
-        } elseif ($key.Character -ne [char]0) {
-            $input += $key.Character
-            Write-Host -NoNewline "*"
+    $secureValue = Read-Host $Prompt -AsSecureString
+    if ($null -eq $secureValue) {
+        return ""
+    }
+
+    $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureValue)
+    try {
+        return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
+    } finally {
+        if ($bstr -ne [IntPtr]::Zero) {
+            [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
         }
     }
-    return $input
 }
 
 function Configure-InstallerAuth {
